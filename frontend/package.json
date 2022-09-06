@@ -4,13 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 8000",
+    "tailwindcss": "tailwindcss -i src/input.tailwind.css -o src/style.css --watch",
     "build": "vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^1.0.1",
     "svelte": "^3.49.0",
+    "tailwindcss": "^3.1.8",
     "vite": "^3.0.0"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.5.2"
   }
 }
