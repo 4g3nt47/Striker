@@ -24,8 +24,16 @@ export const loginUser = (req, res) => {
 
   model.loginUser(req.body.username, req.body.password).then(user => {
     model.setupSession(req.session, user);
-    return res.json({success: "Authentication successful!"});
+    return res.json({
+      username: user.username,
+      admin: user.admin
+    });
   }).catch(error => {
     return res.status(403).json({error: "Authentication failed!"});
   });
+};
+
+export const logoutUser = (req, res) => {
+  req.session.destroy();
+  return res.json({success: "You have been logged out!"});
 };

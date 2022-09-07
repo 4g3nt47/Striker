@@ -29,13 +29,26 @@
       const data = await res.json();
       if (res.status !== 200)
         throw new Error(data.error);
-      success = "Authentication successful!";
-      setTimeout(() => dispatch("switchPage", "home"), 1000);
+      loggedIn(data);
     }catch(err){
+      error = err.message;
+    }finally{
       loginBtn.disabled = false;
       loginBtn.innerText = "Login";
-      error = err.message;
     }
+  };
+
+  /**
+   * Called after a successful login.
+   */
+  const loggedIn = (user) => {
+
+    session.loggedIn = true;
+    session.username = fields.username;
+    session.admin = user.admin;
+    session.page = "home";
+    success = "Authentication successful!";
+    setTimeout(() => dispatch("updateSession", session), 1000);
   };
 
   onMount(() => {
@@ -51,7 +64,7 @@
   <input type="password" id="password" bind:value={fields.password} required>
   <div class="flex flex-row space-x-2 mt-5">
     <Button bind:btn={loginBtn} btnType="submit">Login</Button>
-    <Button type="secondary" on:click={() => dispatch("switchPage", "register")}>Register</Button>
+<Button type="secondary" on:click={() => dispatch("switchPage", "register")}>Register</Button>
   </div>
   <SuccessMsg {success}/>
   <ErrorMsg {error}/>
