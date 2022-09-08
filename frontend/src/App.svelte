@@ -5,17 +5,27 @@
    * @author Umar Abdul
    */
 
+  import {io} from 'socket.io-client';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
   import Login from './components/Login.svelte';
   import Register from './components/Register.svelte';
+  import SuccessMsg from './components/SuccessMsg.svelte';
+  import ErrorMsg from './components/ErrorMsg.svelte';
+
+  let agents = [];
 
   const createSession = () => {
+
+    const backend = "localhost:3000";
     return ({
-      api: "http://localhost:3000",
+      backend: "localhost:3000",
+      api: `http://${backend}`,
+      ws: `ws://${backend}`,
       username: "",
       loggedIn: false,
       admin: false,
+      token: "",
       page: "login"
     });
   };
@@ -57,31 +67,89 @@
 
   const switchPage = (e) => {
     session.page = e.detail;
+    saveSession();
   }
 
-  // Logout the user.
-  const logout = () => {
-    fetch(`${session.api}/user/logout`);
-    session = createSession();
+  // Called after a successful login
+  const loggedIn = (e) => {
+
+    fetchAgents();
+    const user = e.detail;
+    session.loggedIn = true;
+    session.username = user.username;
+    session.admin = user.admin;
+    session.token = user.token;
+    session.page = "agents";
+    wsInit(user.token);
+    saveSession();
   };
 
+  // Logout the user.
+  const logout = async () => {
+
+    fetch(`${session.api}/user/logout`, {
+      credentials: "include"
+    });
+    session = createSession();
+    saveSession();
+  };
+
+  // Intialize web socket.
+  const wsInit = (token) => {
+
+    socket = io(session.ws, {
+      auth: {
+        token
+      }
+    });
+
+    socket.on('connect_error', (err) => {
+      console.log(err.message);
+    });
+
+    // Called when a new agent is created.
+    socket.on('new_agent', (agent) => {
+      agents = [...agents, agent];
+    });
+  };
+
+  const fetchAgents = async () => {
+
+    try{    
+      const res = await fetch(`${session.api}/agent`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        alert("Error loading agents: " + data.error);
+      agents = data;
+    }catch(err){
+      alert(err.message);
+    }
+  };
+
+  let socket = null;
   let session = loadSession();
+  if (session.loggedIn)
+    wsInit(session.token);
 
 </script>
 
 <div>
   {#if (session.page === "login")}
-    <Login {session} on:switchPage={switchPage} on:updateSession={updateSession}/>
+    <Login {session} on:switchPage={switchPage} on:loggedIn={loggedIn}/>
   {:else if (session.page === "register")}
     <Register {session} on:switchPage={switchPage}/>
   {:else}
     <div class="main-body no-scrollbar w-full grid grid-cols-6">
+
       <!-- Header -->
-      <div class="header bg-gray-900 italic text-white col-span-6 bg-gray-400">
-        <p class="text-4xl text-center h-full mt-2 text-green-500">Striker <span class="text-red-700">C2</span></p>
+      <div class="header bg-gray-900 italic text-white col-span-6 border-b-2">
+        <p class="text-4xl text-center h-full mt-5 text-green-500"><Fa icon={icons.faExplosion} class="inline-block w-10 text-red-700"/> Striker <span class="text-red-700">C2</span></p>
       </div>
+
       <!-- The side nav -->
-      <div class="page-nav bg-gray-900 border-t-2 border-gray-300 text-gray-300 col-span-1 pl-5 pt-10 shadow-md shadow-black">
+      <div class="page-nav bg-gray-900 border-gray-300 text-gray-300 col-span-1 pl-5 pt-10 shadow-md shadow-black">
         <ul class="main-nav">
           <li on:click={() => session.page = "agents"}><Fa icon={icons.faRobot} class="inline-block w-10" size="sm"/>Agents</li>
           <li on:click={() => session.page = "tasks"}><Fa icon={icons.faListCheck} class="inline-block w-10" size="sm"/>Tasks</li>
@@ -96,10 +164,24 @@
           <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10" size="sm"/>Logout</li>
         </ul>
       </div>
+
       <!-- The current main page -->
-      <div class="page-body col-span-5 overflow-y-auto pl-5 pt-5">
+      <div class="page-body col-span-5 overflow-y-auto px-5 py-5">
         
+        {#if (session.page === "agents")}
+          {#if (agents.length === 0)}  
+            <ErrorMsg error="No agents available at the moment!"/>
+          {:else}
+            {#each agents as agent, index}
+              <p class="font-mono">{index + 1}: {agent.uid} {`(${new Date(agent.dateCreated).toLocaleString()})`}</p>
+            {/each}
+          {/if}
+        {:else}
+          <ErrorMsg error={`Invalid page: ${session.page}`}/>
+        {/if}
+
       </div>
+
     </div>
   {/if}
 </div>
@@ -107,7 +189,7 @@
 <style>
   
   :root{
-    --header-height: 3em;
+    --header-height: 4em;
   }
 
   .header{

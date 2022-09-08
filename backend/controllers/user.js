@@ -22,11 +22,13 @@ export const createUser = (req, res) => {
 
 export const loginUser = (req, res) => {
 
-  model.loginUser(req.body.username, req.body.password).then(user => {
+  model.loginUser(req.body.username, req.body.password).then(async (user) => {
     model.setupSession(req.session, user);
+    const token = await model.createToken(user.username);
     return res.json({
       username: user.username,
-      admin: user.admin
+      admin: user.admin,
+      token
     });
   }).catch(error => {
     return res.status(403).json({error: "Authentication failed!"});
@@ -34,6 +36,9 @@ export const loginUser = (req, res) => {
 };
 
 export const logoutUser = (req, res) => {
+  
+  if (req.session.loggedIn)
+    model.deleteToken(req.session.username)
   req.session.destroy();
   return res.json({success: "You have been logged out!"});
 };

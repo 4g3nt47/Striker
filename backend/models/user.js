@@ -3,6 +3,7 @@
  * @author Umar Abdul
  */
 
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import validator from 'validator';
@@ -21,6 +22,9 @@ const userSchema = mongoose.Schema({
     type: Boolean,
     required: true,
     default: false
+  },
+  token: {
+    type: String
   },
   creationDate: {
     type: Number,
@@ -93,7 +97,7 @@ export const createUser = async (username, password) => {
  * @param {string} password - The password submitted
  * @return {object} The user's profile
  */
-export const loginUser = async(username, password) => {
+export const loginUser = async (username, password) => {
 
   username = username.toString().trim();
   password = password.toString().trim();
@@ -104,11 +108,55 @@ export const loginUser = async(username, password) => {
 };
 
 /**
+ * Create a temporary token for the user that can be used for authentication.
+ * This token should be created on login, and invalidated on logout.
+ * @param {string} username - Username of the user to create token for.
+ * @return {string} The generated token.
+ */
+export const createToken = async (username) => {
+   
+  const user = await User.findOne({username: username.toString()});
+  if (!user)
+    throw new Error("Invalid user!");
+  const token = crypto.randomBytes(32).toString('hex');
+  user.token = token;
+  await user.save();
+  return token;
+};
+
+/**
+ * Delete the token of a user.
+ * @param {string} username - The target user
+ */
+export const deleteToken = async (username) => {
+
+  const user = await User.findOne({username: username.toString()});
+  if (!user)
+    return;
+  user.token = null;
+  await user.save();
+  return;
+};
+
+/**
+ * Load data of user with the given token.
+ * @param {string} token - The token to lookup
+ * @return {object} The user data.
+ */
+export const getUserByToken = async (token) => {
+  
+  const user = await User.findOne({token: token.toString()});
+  if (!user)
+    throw new Error("Invalid token!");
+  return user;
+};
+
+/**
  * Setup session data for logged in user.
  * @param {object} session - The session object
  * @param {object} user - The user profile
  */
-export const setupSession = async(session, user) => {
+export const setupSession = async (session, user) => {
 
   session.username = user.username;
   session.admin = user.admin;

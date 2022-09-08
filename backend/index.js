@@ -10,9 +10,11 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
+import {Server} from 'socket.io';
 import {output} from './lib/utils.js';
-import User, {setupSession} from './models/user.js';
+import User, {setupSession, getUserByToken} from './models/user.js';
 import userRoute from './routes/user.js';
+import agentRoute from './routes/agent.js';
 
 // .env
 const DB_URL = process.env.DB_URL;
@@ -40,11 +42,6 @@ app.use(session({
   secret: SECRET,
   resave: true,
   saveUninitialized: false,
-  cookie: {
-    sameSite: 'none',
-    secure: true,
-    expires: 1000 * 60 * 60 * 24 * 7
-  },
   store: MongoStore.create({
     mongoUrl: DB_URL,
     ttl: 60 * 60 * 24 * 7,
@@ -72,6 +69,7 @@ app.use(async (req, res, next) => {
 // Mount routes
 
 app.use("/user", userRoute);
+app.use("/agent", agentRoute);
 
 // 404
 app.all("*", (req, res) => {
@@ -87,8 +85,35 @@ app.use((error, req, res, next) => {
 // Start the API server
 output("Connecting to backend database...");
 mongoose.connect(DB_URL).then(() => {
+  
   output("Starting API server...");
-  app.listen(PORT, () => {
+  const httpServer = app.listen(PORT, () => {
     output("Server started on port: " + PORT);
+  });
+
+  /**
+   * Setup the ws server
+   */
+
+  // Create the ws server, and make it global.
+  global.socketServer = new Server(httpServer, {
+    cors: {
+      origin: ORIGIN_URL,
+      methods: ["GET", "POST"]
+    }
+  });
+
+  // Define an auth middleware.
+  socketServer.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token)
+      return next(new Error("Access denied!"));
+    next();
+  });
+
+  // Handle connections.
+
+  socketServer.on('connection', (client) => {
+    output("New ws connection: " + client.id);
   });
 });

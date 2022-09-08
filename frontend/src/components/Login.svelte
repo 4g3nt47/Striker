@@ -29,26 +29,14 @@
       const data = await res.json();
       if (res.status !== 200)
         throw new Error(data.error);
-      loggedIn(data);
+      success = "Authentication successful!";
+      setTimeout(() => dispatch("loggedIn", data), 1000);
     }catch(err){
       error = err.message;
     }finally{
       loginBtn.disabled = false;
       loginBtn.innerText = "Login";
     }
-  };
-
-  /**
-   * Called after a successful login.
-   */
-  const loggedIn = (user) => {
-
-    session.loggedIn = true;
-    session.username = fields.username;
-    session.admin = user.admin;
-    session.page = "home";
-    success = "Authentication successful!";
-    setTimeout(() => dispatch("updateSession", session), 1000);
   };
 
   onMount(() => {
