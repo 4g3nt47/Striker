@@ -3,8 +3,8 @@
  * @author Umar Abdul
  */
 
+import crypto from 'crypto';
 import mongoose from 'mongoose';
-import {v4 as uuid} from 'uuid';
 
 const taskSchema = mongoose.Schema({
   uid: {

@@ -8,15 +8,25 @@ class Striker:
     self.hosts = hosts
     self.server = {}
     self.config = {}
-
+    self.os = os.name
+    self.user = os.getenv("USER")
+    self.hostname = "unknown"
+    if (os.name in ["posix"]):
+      self.os = "linux"
+      try:
+        self.hostname = open("/etc/hostname").read().strip()
+      except:
+        pass
+    elif (os.name in ["nt"]):
+      self.os = "windows"
 
   def info(self):
     return {
-      "uid": os.getuid(),
+      "user": self.user,
       "pid": os.getpid(),
-      "wd": os.getcwd(),
-      "os": os.name,
-      "lang": "python"
+      "cwd": os.getcwd(),
+      "os": self.os,
+      "host": self.hostname
     }
 
   def execTask(self, task):

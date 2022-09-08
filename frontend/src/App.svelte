@@ -12,6 +12,7 @@
   import Register from './components/Register.svelte';
   import SuccessMsg from './components/SuccessMsg.svelte';
   import ErrorMsg from './components/ErrorMsg.svelte';
+  import AgentsList from './components/agent/AgentsList.svelte';
 
   let agents = [];
 
@@ -73,15 +74,21 @@
   // Called after a successful login
   const loggedIn = (e) => {
 
-    fetchAgents();
     const user = e.detail;
     session.loggedIn = true;
     session.username = user.username;
     session.admin = user.admin;
     session.token = user.token;
     session.page = "agents";
-    wsInit(user.token);
+    setupC2();
     saveSession();
+  };
+
+  // Run some setups following authentication.
+  const setupC2 = () => {
+
+    wsInit(session.token);
+    loadAgents();
   };
 
   // Logout the user.
@@ -113,7 +120,8 @@
     });
   };
 
-  const fetchAgents = async () => {
+  // Load agents from the server using the REST API.
+  const loadAgents = async () => {
 
     try{    
       const res = await fetch(`${session.api}/agent`, {
@@ -131,7 +139,7 @@
   let socket = null;
   let session = loadSession();
   if (session.loggedIn)
-    wsInit(session.token);
+    setupC2();
 
 </script>
 
@@ -151,31 +159,26 @@
       <!-- The side nav -->
       <div class="page-nav bg-gray-900 border-gray-300 text-gray-300 col-span-1 pl-5 pt-10 shadow-md shadow-black">
         <ul class="main-nav">
-          <li on:click={() => session.page = "agents"}><Fa icon={icons.faRobot} class="inline-block w-10" size="sm"/>Agents</li>
-          <li on:click={() => session.page = "tasks"}><Fa icon={icons.faListCheck} class="inline-block w-10" size="sm"/>Tasks</li>
-          <li on:click={() => session.page = "listeners"}><Fa icon={icons.faMicrophone} class="inline-block w-10" size="sm"/>Listeners</li>
-          <li on:click={() => session.page = "redirectors"}><Fa icon={icons.faArrowsSpin} class="inline-block w-10" size="sm"/>Redirectors</li>
+          <li on:click={() => session.page = "agents"}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
+          <li on:click={() => session.page = "tasks"}><Fa icon={icons.faListCheck} class="inline-block w-10"/>Tasks</li>
+          <li on:click={() => session.page = "listeners"}><Fa icon={icons.faMicrophone} class="inline-block w-10"/>Listeners</li>
+          <li on:click={() => session.page = "redirectors"}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
             <li on:click={() => session.page = "admin"}><Fa icon={icons.faCrown} class="inline-block w-10"/>Admin</li>
-            <li on:click={() => session.page = "users"}><Fa icon={icons.faUsers} class="inline-block w-10" size="sm"/>Users</li>
-            <li on:click={() => session.page = "logs"}><Fa icon={icons.faMicroscope} class="inline-block w-10" size="sm"/>Logs</li>
+            <li on:click={() => session.page = "users"}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
+            <li on:click={() => session.page = "logs"}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Logs</li>
           {/if}
-          <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10" size="sm"/>Logout</li>
+          <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10"/>Logout</li>
         </ul>
       </div>
 
       <!-- The current main page -->
-      <div class="page-body col-span-5 overflow-y-auto px-5 py-5">
+      <div class="page-body col-span-5 overflow-y-auto px-5 py-5 pt-10 bg-gray">
         
         {#if (session.page === "agents")}
-          {#if (agents.length === 0)}  
-            <ErrorMsg error="No agents available at the moment!"/>
-          {:else}
-            {#each agents as agent, index}
-              <p class="font-mono">{index + 1}: {agent.uid} {`(${new Date(agent.dateCreated).toLocaleString()})`}</p>
-            {/each}
-          {/if}
+          <!-- List agents -->
+          <AgentsList {session} {agents}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

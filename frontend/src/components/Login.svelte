@@ -52,7 +52,7 @@
   <input type="password" id="password" bind:value={fields.password} required>
   <div class="flex flex-row space-x-2 mt-5">
     <Button bind:btn={loginBtn} btnType="submit">Login</Button>
-<Button type="secondary" on:click={() => dispatch("switchPage", "register")}>Register</Button>
+    <Button type="secondary" on:click={() => dispatch("switchPage", "register")}>Register</Button>
   </div>
   <SuccessMsg {success}/>
   <ErrorMsg {error}/>

@@ -19,7 +19,6 @@
     "mongoose": "^6.5.4",
     "multer": "^1.4.5-lts.1",
     "socket.io": "^4.5.2",
-    "uuid": "^9.0.0",
     "validator": "^13.7.0"
   }
 }

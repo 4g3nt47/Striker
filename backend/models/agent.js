@@ -4,11 +4,35 @@
  */
 
 import mongoose from 'mongoose';
-import {v4 as uuid} from 'uuid';
+import crypto from 'crypto';
 
 const agentSchema = mongoose.Schema({
   uid: {
     type: String,
+    required: true
+  },
+  os: {
+    type: String,
+    required: true
+  },
+  host: {
+    type: String,
+    required: true
+  },
+  user: {
+    type: String,
+    required: true
+  },
+  cwd: {
+    type: String,
+    required: true
+  },
+  pid: {
+    type: Number,
+    required: true
+  },
+  data: {
+    type: Object,
     required: true
   },
   dateCreated: {
@@ -18,10 +42,6 @@ const agentSchema = mongoose.Schema({
   lastSeen: {
     type: Number,
     required: true
-  },
-  info: {
-    type: Object,
-    required: true
   }
 });
 
@@ -30,17 +50,22 @@ export default Agent;
 
 /**
  * Create a new agent.
- * @param {object} data - Agent info, as received from the agent.
+ * @param {object} data - Agent data as received from the agent.
  * @return {object} The configuration data to send to the agent `config`, and the agent db object. 
  */
-export const createAgent = async (info) => {
+export const createAgent = async (data) => {
 
-  const uid = uuid();
+  const uid = crypto.randomBytes(8).toString('hex');
   const agent = new Agent({
     uid,
+    os: (data.os ? data.os.toString() : "unknown"),
+    host: (data.host ? data.host.toString() : "unknown"),
+    user: (data.user ? data.user.toString() : "unknown"),
+    cwd: (data.cwd ? data.cwd.toString() : "unknown"),
+    pid: (data.pid === undefined ? parseInt(data.pid) : -1),
     dateCreated: Date.now(),
     lastSeen: Date.now(),
-    info
+    data: {}
   });
   await agent.save();
   const config = {
