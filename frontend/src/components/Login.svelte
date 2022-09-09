@@ -54,6 +54,6 @@
     <Button bind:btn={loginBtn} btnType="submit">Login</Button>
     <Button type="secondary" on:click={() => dispatch("switchPage", "register")}>Register</Button>
   </div>
-  <SuccessMsg {success}/>
-  <ErrorMsg {error}/>
+  <SuccessMsg {success} textColor="text-white"/>
+  <ErrorMsg {error} textColor="text-white"/>
 </form>

@@ -62,7 +62,7 @@ export const createAgent = async (data) => {
     host: (data.host ? data.host.toString() : "unknown"),
     user: (data.user ? data.user.toString() : "unknown"),
     cwd: (data.cwd ? data.cwd.toString() : "unknown"),
-    pid: (data.pid === undefined ? parseInt(data.pid) : -1),
+    pid: (data.pid !== undefined ? parseInt(data.pid) : -1),
     dateCreated: Date.now(),
     lastSeen: Date.now(),
     data: {}
@@ -76,10 +76,10 @@ export const createAgent = async (data) => {
 };
 
 /**
- * Get all available agents
+ * Get all available agents, with newer agents placed first.
  */
 export const getAgents = async () => {
-  return await Agent.find({});
+  return (await Agent.find({})).reverse();
 };
 
 /**
@@ -93,4 +93,13 @@ export const getAgent = async (agentID) => {
   if (!agent)
     throw new Error("Invalid agent!");
   return agent;
+};
+
+/**
+ * Update the last seen time of an agent.
+ * Should be called whenever an agent checks in to receive new tasks.
+ * @param {string} agentID - ID of the agent.
+ */
+export const updateLastSeen = async (agentID) => {
+  await Agent.updateOne({uid: agentID.toString()}, {lastSeen: Date.now()});
 };

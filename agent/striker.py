@@ -30,10 +30,11 @@ class Striker:
     }
 
   def execTask(self, task):
+    print(task)
     taskID = task['uid']
     data = task['data']
     result = "Not implemented!"
-    if (task['type'] == "system"):
+    if (task['taskType'] == "system"):
       cmd = data['cmd']
       proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       result = proc.stderr.read() + proc.stdout.read()
@@ -62,15 +63,19 @@ class Striker:
       while True:
         time.sleep(delay / 1000.0)
         results = []
-        rsp = requests.get(baseUrl + "/agent/tasks/" + uid)
+        rsp = ""
+        try:
+          rsp = requests.get(baseUrl + "/agent/tasks/" + uid)
+        except Exception, e:
+          print(str(e))
+          continue
         tasks = json.loads(rsp.text)
         for task in tasks:
           taskID = task['uid']
           result = self.execTask(task)
           results.append(result)
         if (len(results) > 0):
-          rsp = requests.post("/agent/tasks/" + uuid, json=results)
-
+          rsp = requests.post(baseUrl + "/agent/tasks/" + uid, json=results)
 
 if __name__ == '__main__':
   striker = Striker([{"proto": "http", "host":"127.0.0.1", "port":3000}])

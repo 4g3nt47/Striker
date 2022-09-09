@@ -15,6 +15,7 @@ import {output} from './lib/utils.js';
 import User, {setupSession, getUserByToken} from './models/user.js';
 import userRoute from './routes/user.js';
 import agentRoute from './routes/agent.js';
+import * as taskModel from './models/task.js';
 
 // .env
 const DB_URL = process.env.DB_URL;
@@ -42,6 +43,9 @@ app.use(session({
   secret: SECRET,
   resave: true,
   saveUninitialized: false,
+  cookie: {
+    expires: 1000 * 60 * 60 * 24 * 7
+  },
   store: MongoStore.create({
     mongoUrl: DB_URL,
     ttl: 60 * 60 * 24 * 7,
@@ -95,6 +99,8 @@ mongoose.connect(DB_URL).then(() => {
    * Setup the ws server
    */
 
+  const users = {}; // Used to map connected socket IDs to user names.
+
   // Create the ws server, and make it global.
   global.socketServer = new Server(httpServer, {
     cors: {
@@ -105,15 +111,35 @@ mongoose.connect(DB_URL).then(() => {
 
   // Define an auth middleware.
   socketServer.use((socket, next) => {
+
     const token = socket.handshake.auth.token;
     if (!token)
       return next(new Error("Access denied!"));
-    next();
+    // Authenticate.
+    getUserByToken(token).then(user => {
+      users[socket.id] = user.username;
+      next();
+    }).catch(error => {
+      return next(new Error("Access denied!"));
+    });
   });
 
   // Handle connections.
 
   socketServer.on('connection', (client) => {
+
     output("New ws connection: " + client.id);
+    const username = users[client.id];
+
+    // For creating a new task by users.
+    client.on("create_task", (data) => {
+      taskModel.createTask(username, data).then(task => {
+        socketServer.emit("new_task", task);
+      }).catch(error => {
+        client.emit("striker_error", error.message);
+      });
+    });
+
   });
+
 });

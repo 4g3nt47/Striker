@@ -18,11 +18,11 @@
 }
 
 form.login-form, form.signup-form{
-  @apply w-1/3 bg-gray-200 shadow-md shadow-gray-600 p-5 mx-auto;
+  @apply w-1/3 bg-gray-900 text-white shadow-md shadow-gray-600 p-5 mx-auto;
 }
 
 form input[type='text'], form input[type='password'], form input[type="datetime-local"], form input[type="number"], form textarea{
-  @apply block w-full my-1 mb-3 leading-7 border-2 border-gray-600 rounded-md px-1;
+  @apply block w-full my-1 mb-3 text-black leading-7 border-2 border-gray-600 rounded-md px-1;
 }
 
 form input[type='submit']{
