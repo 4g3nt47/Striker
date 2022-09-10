@@ -47,7 +47,7 @@
 
 <form class="login-form mt-28" on:submit|preventDefault={login}>
   <label for="username">Username:</label>
-  <input type="text" id="username" bind:value={fields.username} required>
+  <input type="text" id="username" bind:value={fields.username} autocomplete="off" required>
   <label for="password">Password:</label>
   <input type="password" id="password" bind:value={fields.password} required>
   <div class="flex flex-row space-x-2 mt-5">

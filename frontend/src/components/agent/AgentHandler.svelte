@@ -130,7 +130,7 @@
       <TasksList {tasks}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
-      <input class="w-full border-2 border-gray-900 pl-2 font-mono bg-gray-300" type="text" placeholder="command..." bind:value={consoleCommand} on:change={consoleExec}>
+      <input class="w-full border-2 border-gray-900 pl-2 font-mono bg-gray-300" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:change={consoleExec}>
     {:else if (currTab === "Manage")}
       <div class="mt-10 p-2 border border-black flex gap-x-2">
         <Button >Freeze Agent</Button>

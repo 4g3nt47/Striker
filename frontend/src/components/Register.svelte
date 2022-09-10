@@ -50,7 +50,7 @@
 
 <form class="signup-form mt-28" on:submit|preventDefault={register}>
   <label for="username">Username:</label>
-  <input type="text" id="username" bind:value={fields.username} required>
+  <input type="text" id="username" bind:value={fields.username} autocomplete="off" required>
   <label for="password">Password:</label>
   <input type="password" id="password" bind:value={fields.password} required>
   <label for="conf-password">Confirm password:</label>
