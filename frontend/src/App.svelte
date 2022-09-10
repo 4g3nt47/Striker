@@ -113,13 +113,15 @@
 
     // Handle auth/connection error.
     socket.on('connect_error', (err) => {
-      console.log(err.message);
+      console.log("Error connecting to ws: " + err.message);
     });
 
     // Called when a new agent is created.
     socket.on('new_agent', (agent) => {
+      
       agents = [agent, ...agents];
       tasks[agent.uid] = [];
+      consoleMsgs[agent.uid] = [];
     });
 
     // Called when an agent is updated.
@@ -146,6 +148,7 @@
       tasks[agentID].unshift(task);
       if (selectedAgent && selectedAgent.uid === agentID)
         selectedAgentTasks = tasks[agentID];
+      updateConsoleMessage(agentID, `[StrikerC2] > Task created by '${task.owner}'. ID: ${task.uid}  Type: ${task.taskType}`);
     });
 
     // Called when a task is updated.
@@ -160,6 +163,10 @@
           agentTasks[i] = task;
           if (selectedAgent && selectedAgent.uid === agentID)
             selectedAgentTasks = agentTasks;
+          if (task.completed)
+            updateConsoleMessage(agentID, `[StrikerC2] > Task completed: ${task.uid}\n${task.result}`);
+          else if (task.received)
+            updateConsoleMessage(agentID, `[StrikerC2] > Task '${task.uid}' received by agent.`);
           break;
         }
       }
@@ -170,6 +177,10 @@
       console.log("Error: " + err);
     });
 
+    // Handles server-side disconnection.
+    socket.on('disconnect', () => {
+      console.log("Web socket disconnected!");
+    });
   };
 
   // Load agents from the server using the REST API.
@@ -183,6 +194,8 @@
       if (res.status !== 200)
         alert("Error loading agents: " + data.error);
       agents = data;
+      for (let i = 0; i < agents.length; i++)
+        consoleMsgs[agents[i].uid] = [];
     }catch(err){
       alert(err.message);
     }
@@ -212,10 +225,24 @@
     session.page = "agentPage";
   };
 
-  let agents = [];
-  let tasks = {};
-  let selectedAgent = null;
-  let selectedAgentTasks = null;
+  /**
+   * Update console message of an agent.
+   * @param {string} agentID - The ID of the target agent.
+   * @param {string} msg - The new message to add.
+   */
+  const updateConsoleMessage = (agentID, msg) => {
+    
+    // Remove trailing newlines.
+    msg = msg.replace(/\r\n+$/, "");
+    msg = msg.replace(/\n+$/, "");
+    consoleMsgs[agentID] = [...consoleMsgs[agentID], msg];
+  };
+
+  let agents = []; // All available agents.
+  let tasks = {}; // All agent IDs mapped to an array of their tasks
+  let selectedAgent = null; // The current agent being handled by the user
+  let selectedAgentTasks = null; // Tasks of the current agent being handled
+  let consoleMsgs = {}; // IDs of agents mapped to the list of texts to display in their console view.
 
   let socket = null;
   let session = loadSession();
@@ -260,7 +287,7 @@
           <!-- List agents -->
           <AgentsList {agents} {tasks} on:selectedAgent={useAgent}/>
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
-          <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks}/>
+          <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

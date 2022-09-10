@@ -15,18 +15,35 @@
   export let socket = null;
   export let agent = {};
   export let tasks = [];
+  export let consoleMsgs = [];
   
+  const dispatch = createEventDispatcher();
   let tabs = ["Info", "Tasks", "Console", "Manage"]
   let currTab = tabs[0];
   let shellCommand = "";
   let consoleText = "";
+  let msgCount = 0;
+
+  const updateConsole = (consoleMsgs) => {
+    
+    if (msgCount === consoleMsgs.length) // A hacky solution for an autoscroll bug when nothing changes
+      return;
+    msgCount = consoleMsgs.length;
+    consoleText = consoleMsgs.join("\n");
+    // Scroll to bottom.
+    let elem = document.getElementById('console-text');
+    if (elem)
+      setTimeout(() => elem.scrollTop = elem.scrollHeight, 50); // Need the function to return before this code is run else the last line will not be visible.
+  };
+
+  // A reactive expression to update render new console messages.
+  $: updateConsole(consoleMsgs);
 
   const sendShellCommand = async () => {
 
     if (shellCommand.trim().length === 0)
       return;
     let cmd = shellCommand;
-    consoleText += `${session.username} > ${cmd}\n`;
     shellCommand = "";
     socket.emit("create_task", {
       agentID: agent.uid,
@@ -87,7 +104,7 @@
         </tr>
       </table>
     {:else if (currTab === "Console")}
-      <textarea class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-green-500" rows="15" bind:value={consoleText} readonly></textarea>
+      <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
       <input class="w-full border-2 border-gray-900 pl-2 font-mono bg-gray-300" type="text" placeholder="command..." bind:value={shellCommand} on:change={sendShellCommand}>
     {:else if (currTab === "Tasks")}
       <TasksList {tasks}/>

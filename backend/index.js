@@ -100,6 +100,7 @@ mongoose.connect(DB_URL).then(() => {
    */
 
   const users = {}; // Used to map connected socket IDs to user names.
+  global.socketObjects = {}; // Used to map usernames to connected socket objects.
 
   // Create the ws server, and make it global.
   global.socketServer = new Server(httpServer, {
@@ -128,8 +129,9 @@ mongoose.connect(DB_URL).then(() => {
 
   socketServer.on('connection', (client) => {
 
-    output("New ws connection: " + client.id);
     const username = users[client.id];
+    socketObjects[username] = client;
+    output(`New ws connection for ${username}: ${client.id}`);
 
     // For creating a new task by users.
     client.on("create_task", (data) => {

