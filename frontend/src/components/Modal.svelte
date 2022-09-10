@@ -24,7 +24,7 @@
 
 {#if (show)}
   <div class="absolute left-0 top-0 z-10 w-full h-full bg-black bg-opacity-70" on:click|self={hideModal}>
-    <div class="w-1/2 max-h-96 mx-auto mt-40 bg-gray-300 p-3 shadow-lg shadow-black rounded no-scrollbar overflow-y-auto">
+    <div class="w-2/3 max-h-96 mx-auto mt-32 bg-gray-300 p-3 shadow-lg shadow-black rounded no-scrollbar overflow-y-auto">
       <slot></slot>
     </div>
   </div>
