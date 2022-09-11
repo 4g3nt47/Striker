@@ -3,16 +3,21 @@
   /**
    * @file This component displays a list of all available tasks for an agent.
    * @author Umar Abdul
+   * Props:
+   *          socket - The connected ws object.
+   *          tasks - The tasks to list.
    */
 
-  import {createEventDispatcher} from 'svelte';
   import {slide} from 'svelte/transition';
-  import ErrorMsg from '../ErrorMsg.svelte';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
+  import Button from '../Button.svelte';
+  import ErrorMsg from '../ErrorMsg.svelte';
   import Modal from '../Modal.svelte';
 
+  export let socket = null;
   export let tasks = [];
+
   let showTaskModal = false;
   let selectedTask = null;
   let selectedTaskData = "";
@@ -34,6 +39,18 @@
     
     selectedTask = null;
     showTaskModal = false;
+  };
+
+  // Called when the delete task button of selected task is clicked.
+  const deleteTask = () => {
+
+    if (!confirm(`Delete task '${selectedTask.uid}'?`))
+      return;
+    socket.emit("delete_task", {
+      agentID: selectedTask.agentID,
+      taskID: selectedTask.uid
+    });
+    releaseTask();
   };
 
 </script>
@@ -78,7 +95,10 @@
           {selectedTask.result.length > 0 ? selectedTask.result : "[Task returned no result]"}
         </div>
       {/if}
-      <!-- Todo: Task management options -->
+    </div>
+    <!-- Task management options -->
+    <div class="w-1/3 mt-2 mx-auto">
+      <Button type="danger" on:click={deleteTask}>Delete Task</Button>
     </div>
   </Modal>
 {/if}

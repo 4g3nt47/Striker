@@ -11,8 +11,6 @@
    *        consoleMsgs - The messages to display in the agent console
    * Events:
    *        clearConsole - Notify parent to clear the console messages `consoleMsgs` of the agent
-   *        updateConsole - Notify parent to add a message to the agent console.
-   *                        Takes the new message as detail.
    */
 
   import {createEventDispatcher} from 'svelte';
@@ -22,7 +20,6 @@
   import TasksList from './TasksList.svelte';
   import Button from '../Button.svelte';
 
-  export let session = {};
   export let socket = null;
   export let agent = {};
   export let tasks = [];
@@ -34,6 +31,7 @@
   let consoleCommand = "";
   let consoleText = "";
   let msgCount = 0;
+
   const updateConsole = (consoleMsgs) => {
     
     if (msgCount === consoleMsgs.length) // A hacky solution for an autoscroll bug when nothing changes
@@ -121,7 +119,7 @@
         </tr>        
       </table>
     {:else if (currTab === "Tasks")}
-      <TasksList {tasks}/>
+      <TasksList {socket} {tasks}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
       <input class="w-full border-2 border-gray-900 pl-2 font-mono bg-gray-300" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:change={consoleExec}>

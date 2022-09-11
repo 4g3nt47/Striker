@@ -24,6 +24,7 @@ export const setupWS = (httpServer) => {
   });
 
   global.socketObjects = {}; // Maps usernames to connected socket objects.
+  global.serverPrompt = "[StrikerC2] > "; // The console prompt to use for server output.
   const users = {}; // Maps connected socket IDs to usernames.
 
   // Define an auth middleware.
@@ -45,13 +46,14 @@ export const setupWS = (httpServer) => {
 
   socketServer.on('connection', (client) => {
 
-    const serverPrompt = "[StrikerC2] > ";
+    const serverPrompt = global.serverPrompt;
     const username = users[client.id];
     socketObjects[username] = client;
     output(`New ws connection for ${username}: ${client.id}`);
 
     /**
-     * For processing raw console inputs from users. Note that some inputs are handled completely in the client side.
+     * For processing raw console inputs from users. 
+     * Note that some inputs are handled completely in the client side.
      * Both input and results are broadcasted to all connected users.
      */
     client.on("agent_console_input", (data) => {
@@ -114,6 +116,14 @@ export const setupWS = (httpServer) => {
     client.on("create_task", (data) => {
 
        taskModel.createTask(username, data).catch(error => {
+        client.emit("striker_error", error.message);
+      });
+    });
+
+    // For deleting a task.
+    client.on("delete_task", (data) => {
+
+      taskModel.deleteTask(data.agentID, data.taskID, username).catch(error => {
         client.emit("striker_error", error.message);
       });
     });

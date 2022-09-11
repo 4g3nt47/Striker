@@ -56,7 +56,7 @@ const Task = mongoose.model('task', taskSchema);
 export default Task;
 
 /**
- * Create a new task. Broadcasts "new_task" ws on success.
+ * Create a new task. Emits "new_task" ws event on success.
  * @param {string} owner - The task owner (username of the user that creates the task)
  * @param {object} data - The request body received.
  * @return {object} The task created.
@@ -70,7 +70,7 @@ export const createTask = async (owner, data) => {
   const taskType = data.taskType.toString().trim();
   const task = new Task({
     uid: taskID,
-    owner: owner,
+    owner,
     agentID: agent.uid,
     taskType,
     data: data.data,
@@ -78,7 +78,38 @@ export const createTask = async (owner, data) => {
   });
   await task.save();
   socketServer.emit("new_task", task);
+  socketServer.emit("agent_console_output", {
+    agentID: task.agentID,
+    msg: global.serverPrompt + `Task '${task.uid}' created by '${task.owner}'`
+  });
   return task;
+};
+
+/**
+ * Delete an existing task. Emits "task_deleted" event on success.
+ * @param {string} agentID - The ID of the agent.
+ * @param {string} taskID - The ID of the task.
+ * @param {string} username - The username of the user that request the action.
+ * @return {object} The query result.
+ */
+export const deleteTask = async (agentID, taskID, username) => {
+
+  const socketServer = global.socketServer;
+  agentID = agentID.toString();
+  taskID = taskID.toString();
+  const data = await Task.deleteOne({uid: taskID, agentID});
+  if (data.deletedCount > 0){    
+    socketServer.emit("task_deleted", {
+      taskID,
+      agentID,
+      username
+    });
+    socketServer.emit("agent_console_output", {
+      agentID,
+      msg: global.serverPrompt + `Task '${taskID}' deleted by '${username}'`
+    });
+  }
+  return data;
 };
 
 /**
@@ -137,6 +168,10 @@ export const markReceived = async (taskID) => {
   task.dateReceived = Date.now();
   await task.save();
   socketServer.emit("update_task", task);
+  socketServer.emit("agent_console_output", {
+    agentID: task.agentID,
+    msg: global.serverPrompt + `Task '${task.uid}' received by agent`
+  });
   return task;
 };
 
@@ -154,8 +189,15 @@ export const setResult = async (taskID, result) => {
     return null;
   task.completed = true;
   task.dateCompleted = Date.now();
-  task.result = result.toString();
+  // Cleanup trailing newlines.
+  result = result.toString().replace(/\r\n+$/, "");
+  result = result.replace(/\n+$/, "");
+  task.result = result;
   await task.save();
   socketServer.emit("update_task", task);
+  socketServer.emit("agent_console_output", {
+    agentID: task.agentID,
+    msg: global.serverPrompt + `Task completed '${task.uid}'. ${task.result.length} bytes received.\n${task.result}`
+  });
   return task;
 };
