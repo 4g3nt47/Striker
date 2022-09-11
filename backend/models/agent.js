@@ -11,6 +11,11 @@ const agentSchema = mongoose.Schema({
     type: String,
     required: true
   },
+  delay: {
+    type: Number,
+    required: true,
+    default: 10000
+  },
   os: {
     type: String,
     required: true
@@ -33,7 +38,7 @@ const agentSchema = mongoose.Schema({
   },
   data: {
     type: Object,
-    required: true
+    required: false
   },
   dateCreated: {
     type: Number,
@@ -42,6 +47,11 @@ const agentSchema = mongoose.Schema({
   lastSeen: {
     type: Number,
     required: true
+  },
+  frozen: {
+    type: Boolean,
+    required: true,
+    default: false
   }
 });
 
@@ -49,28 +59,30 @@ const Agent = mongoose.model('agent', agentSchema);
 export default Agent;
 
 /**
- * Create a new agent.
+ * Create a new agent. Emits the "new_agent" ws event on success.
  * @param {object} data - Agent data as received from the agent.
  * @return {object} The configuration data to send to the agent `config`, and the agent db object. 
  */
 export const createAgent = async (data) => {
 
+  const socketServer = global.socketServer;
   const uid = crypto.randomBytes(8).toString('hex');
   const agent = new Agent({
     uid,
+    delay: global.AGENT_DELAY,
     os: (data.os ? data.os.toString() : "unknown"),
     host: (data.host ? data.host.toString() : "unknown"),
     user: (data.user ? data.user.toString() : "unknown"),
     cwd: (data.cwd ? data.cwd.toString() : "unknown"),
     pid: (data.pid !== undefined ? parseInt(data.pid) : -1),
     dateCreated: Date.now(),
-    lastSeen: Date.now(),
-    data: {}
+    lastSeen: Date.now()
   });
   await agent.save();
+  socketServer.emit("new_agent", agent);
   const config = {
-    uid,
-    delay: 2000
+    uid: agent.uid,
+    delay: agent.delay,
   };
   return {config, agent};
 };
@@ -96,10 +108,53 @@ export const getAgent = async (agentID) => {
 };
 
 /**
- * Update the last seen time of an agent.
+ * Update the last seen time of an agent. Emits the "update_agent" ws event on success.
  * Should be called whenever an agent checks in to receive new tasks.
  * @param {string} agentID - ID of the agent.
+ * @return {object} The updated agent, null if not valid.
  */
 export const updateLastSeen = async (agentID) => {
-  await Agent.updateOne({uid: agentID.toString()}, {lastSeen: Date.now()});
+  
+  const socketServer = global.socketServer;
+  const agent = await Agent.findOne({uid: agentID.toString()});
+  if (!agent)
+    return null;
+  agent.lastSeen = Date.now();
+  await agent.save();
+  socketServer.emit("update_agent", agent);
+  return agent;
+};
+
+/**
+ * Freeze an agent. Emits the "update_agent" ws event on success.
+ * @param {string} agentID - The ID of the agent.
+ * @return {object} The frozen agent, null if invalid or already frozen.
+ */
+export const freezeAgent = async (agentID) => {
+  
+  const socketServer = global.socketServer;
+  const agent = await Agent.findOne({uid: agentID.toString()});
+  if (!(agent && agent.frozen === false))
+    return null;
+  agent.frozen = true;
+  await agent.save();
+  socketServer.emit("update_agent", agent);
+  return agent;
+};
+
+/**
+ * Unfreeze an agent. Emits the "update_agent" ws event on success.
+ * @param {string} agentID - The ID of the agent.
+ * @return {object} The unfrozen agent, null if invalid or if agent was not frozen.
+ */
+export const unfreezeAgent = async (agentID) => {
+
+  const socketServer = global.socketServer;
+  const agent = await Agent.findOne({uid: agentID.toString()});
+  if (!(agent && agent.frozen === true))
+    return null;
+  agent.frozen = false;
+  await agent.save();
+  socketServer.emit("update_agent", agent);
+  return agent;
 };

@@ -34,7 +34,7 @@
       <th><Fa icon={icons.faEye} class="inline-block w-10 text-green-500"/>Last Callback</th>
     </tr>
     {#each agents as agent, index}
-      <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" on:click={() => useAgent(agent)}>
+      <tr transition:slide|local={{duration: 200}} class={"cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" + (agent.frozen ? " text-cyan-700" : "")} on:click={() => useAgent(agent)}>
         <td class="pl-2">{agent.uid}</td>
         <td class="pl-2">{agent.os}</td>
         <td class="pl-2">{`${agent.user}@${agent.host}`}</td>

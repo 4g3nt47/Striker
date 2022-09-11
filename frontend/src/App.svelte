@@ -166,6 +166,11 @@
       }
     });
 
+    // For writing some text to the console of an agent.
+    socket.on('agent_console_output', (data) => {
+      updateConsoleMessage(data.agentID, data.msg);
+    });
+
     // Handles custom errors.
     socket.on('striker_error', (err) => {
       console.log("Error: " + err);
@@ -225,6 +230,8 @@
     // Remove trailing newlines.
     msg = msg.replace(/\r\n+$/, "");
     msg = msg.replace(/\n+$/, "");
+    if (!(agentID in consoleMsgs))
+      consoleMsgs[agentID] = [];
     consoleMsgs[agentID] = [...consoleMsgs[agentID], msg];
   };
 
@@ -316,6 +323,5 @@
   .page-nav, .page-body{
     height: calc(100vh - var(--header-height));
   }
-
 
 </style>

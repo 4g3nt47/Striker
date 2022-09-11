@@ -6,13 +6,16 @@
 import Agent, * as agentModel from '../models/agent.js';
 import Task, * as taskModel from '../models/task.js';
 
+// A generic error message for requests that got denied due to perm issues.
+const PERM_ERROR = {error: "Permission denied!"};
+
 /**
  * Create a new agent. Called when a new agent calls home.
+ * Sends an empty JSON to the client when it's unauthorized or a problem occurred.
  */
 export const agentInit = (req, res) => {
   
   agentModel.createAgent(req.body).then(data => {
-    socketServer.emit("new_agent", data.agent);
     return res.json(data.config);
   }).catch(error => {
     return res.status(500).json({error: error.message});
@@ -25,7 +28,7 @@ export const agentInit = (req, res) => {
 export const getAgents = (req, res) => {
 
   if (req.session.loggedIn !== true)
-    return res.status(403).json({error: "Permission denied!"});
+    return res.status(403).json(PERM_ERROR);
   agentModel.getAgents().then(agents => {
     return res.json(agents);
   }).catch(error => {
@@ -39,7 +42,7 @@ export const getAgents = (req, res) => {
 export const getAgent = (req, res) => {
 
   if (req.session.loggedIn !== true)
-    return res.status(403).json({error: "Permission denied!"});
+    return res.status(403).json(PERM_ERROR);
   agentModel.getAgent(req.params.uid).then(agent => {
     return req.json(agent);
   }).catch(error => {
@@ -53,9 +56,8 @@ export const getAgent = (req, res) => {
 export const createTask = (req, res) => {
 
   if (req.session.loggedIn !== true)
-    return res.status(403).json({error: "Permission denied!"});
+    return res.status(403).json(PERM_ERROR);
   taskModel.createTask(req.session.username, req.body).then(task => {
-    socketServer.emit("new_task", task);
     return res.json(task);
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -64,11 +66,12 @@ export const createTask = (req, res) => {
 
 /**
  * Get all tasks for all agents. For authenticated users only.
+ * Should normally be used only once by clients for session setup. Any other update should be through ws
  */
 export const getAllTasks = (req, res) => {
 
   if (req.session.loggedIn !== true)
-    return res.status(403).json({error: "Permission denied!"});
+    return res.status(403).json(PERM_ERROR);
   taskModel.getAllTasks().then(tasks => {
     return res.json(tasks);
   }).catch(error => {
@@ -84,20 +87,19 @@ export const getPendingTasks = (req, res) => {
 
   const agentID = req.params.uid;
   agentModel.updateLastSeen(agentID);
-  createUpdateAgentEvent(agentID);
-  taskModel.getPendingTasks(agentID).then(async (tasks) => {
+  taskModel.getPendingTasks(agentID).then(tasks => {
     // Mark them as received.
     for (let task of tasks){
       try{
-        await taskModel.markReceived(task.uid);
-        createUpdateTaskEvent(task.uid);
+        taskModel.markReceived(task.uid);
       }catch(err){
         console.log(err);
       }
     }
-
     return res.json(tasks);
-  });
+  }).catch(error => {
+    return res.json([]);
+  })
 };
 
 /**
@@ -106,7 +108,7 @@ export const getPendingTasks = (req, res) => {
 export const getTasks = (req, res) => {
 
   if (req.session.loggedIn !== true)
-    return res.status(403).json({error: "Permission denied!"});
+    return res.status(403).json(PERM_ERROR);
   const agentID = req.params.uid;
   taskModel.getTasks(agentID).then(tasks => {
     return res.json(tasks);
@@ -118,16 +120,15 @@ export const getTasks = (req, res) => {
 /**
  * Used by agents to submit the results of their tasks.
  */
-export const setTasksResults = async (req, res) => {
+export const setTasksResults = (req, res) => {
 
   const agentID = req.params.uid;
   const results = req.body;
   if (!(results && results.length !== 0))
-    return res.status(403).json({error: "No results defined!"});
+    return res.json({});
   for (let result of results){
     try{
-      await taskModel.setResult(result.uid, result.result);
-      createUpdateTaskEvent(result.uid);
+      taskModel.setResult(result.uid, result.result);
     }catch(error){
       console.log(error);
     }
@@ -136,27 +137,31 @@ export const setTasksResults = async (req, res) => {
 };
 
 /**
- * Broadcast an updated agent to users.
- * @param agentID - The ID of the agent. If this is an object, it will be treated as an already-loaded agent.
+ * Freeze an active agent.
  */
-export const createUpdateAgentEvent = async (agentID) => {
+export const freezeAgent = (req, res) => {
 
-  let agent = agentID;
-  if (typeof(agent) !== "object")
-    agent = await Agent.findOne({uid: agentID.toString()});
-  if (agent)
-    socketServer.emit("update_agent", agent);
+  if (req.session.loggedIn !== true)
+    return res.status(403).json(PERM_ERROR);
+  const agentID = req.param.uid;
+  agentModel.freezeAgent(agentID).then(data => {
+    return res.json({success: "Agent frozen!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
 };
 
 /**
- * Broadcast an updated task to users.
- * @param taskID - The ID of the task. If this is an object, it will be treated as an already-loaded task.
+ * Unfreeze an active agent.
  */
-export const createUpdateTaskEvent = async (taskID) => {
+export const unfreezeAgent = (req, res) => {
 
-  let task = taskID;
-  if (typeof(task) !== "object")
-    task = await Task.findOne({uid: taskID.toString()});
-  if (task)
-    socketServer.emit("update_task", task);
+  if (req.session.loggedIn !== true)
+    return res.status(403).json({error: "Permission denied"});
+  const agentID = req.param.uid;
+  agentModel.unfreezeAgent(agentID).then(data => {
+    return res.json({success: "Agent unfrozen!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
 };

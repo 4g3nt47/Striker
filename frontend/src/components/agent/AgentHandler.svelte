@@ -29,12 +29,11 @@
   export let consoleMsgs = [];
   
   const dispatch = createEventDispatcher();
-  let tabs = ["Info", "Tasks", "Console", "Manage"]
+  let tabs = ["Info", "Tasks", "Console"]
   let currTab = tabs[0];
   let consoleCommand = "";
   let consoleText = "";
   let msgCount = 0;
-
   const updateConsole = (consoleMsgs) => {
     
     if (msgCount === consoleMsgs.length) // A hacky solution for an autoscroll bug when nothing changes
@@ -59,19 +58,10 @@
       return;
     if (consoleCommand === "clear"){
       dispatch("clearConsole", agent.uid);
-    }else if (consoleCommand.startsWith("system ")){ 
-      let cmd = consoleCommand.substr(7);
-      socket.emit("create_task", {
-        agentID: agent.uid,
-        taskType: "system",
-        data: {
-          cmd
-        }
-      });
     }else{
-      dispatch("updateConsole", {
-        agentID: agent.uid,
-        msg: "[StrikerC2] > Unknown command: " + consoleCommand
+      socket.emit("agent_console_input", {
+        agent,
+        input: consoleCommand
       });
     }
     consoleCommand = "";
@@ -125,18 +115,16 @@
           <th class="text-right pr-5">Last Contact:</th>
           <td>{new Date(agent.lastSeen).toLocaleString() + ` (${((Date.now() - agent.lastSeen) / (1000 * 60)).toFixed(2)} minutes)`}</td>
         </tr>
+        <tr class="border-b-2 border-gray-900">
+          <th class="text-right pr-5">Frozen:</th>
+          <td class={agent.frozen ? "text-cyan-700" : ""}>{agent.frozen}</td>
+        </tr>        
       </table>
     {:else if (currTab === "Tasks")}
       <TasksList {tasks}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
       <input class="w-full border-2 border-gray-900 pl-2 font-mono bg-gray-300" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:change={consoleExec}>
-    {:else if (currTab === "Manage")}
-      <div class="mt-10 p-2 border border-black flex gap-x-2">
-        <Button >Freeze Agent</Button>
-        <Button type="danger">Delete Tasks</Button>
-        <Button type="danger">Delete Agent</Button>
-      </div>
     {/if}
   </div>
 </div>

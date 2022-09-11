@@ -5,7 +5,7 @@
 
 import {Router} from 'express';
 import {
-  getAgent, getAgents, agentInit,
+  getAgent, getAgents, agentInit, freezeAgent, unfreezeAgent,
   createTask, getAllTasks, getPendingTasks, getTasks, setTasksResults
 } from '../controllers/agent.js';
 
@@ -22,6 +22,7 @@ router.post("/tasks/:uid", setTasksResults);
 router.get("/", getAgents);
 router.get("/:uid", getAgent);
 router.post("/init", agentInit);
-
+router.get("/freeze/:uid", freezeAgent);
+router.get("/unfreeze/:uid", unfreezeAgent);
 
 export default router;

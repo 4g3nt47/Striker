@@ -58,7 +58,7 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Received</th>
-          <td class={"pl-2 " + (selectedTask.received ? "text-blue-700" : "")}>{selectedTask.received ? "yes" : "no"}</td>
+          <td class="pl-2">{selectedTask.received ? new Date(selectedTask.dateReceived).toLocaleString() : "no"}</td>
         </tr>
         {#if (selectedTask.completed)}
           <tr class="border-2 border-gray-900">
@@ -74,7 +74,7 @@
       </div>
       {#if (selectedTask.completed)}
         <p>Task Result:</p>
-        <div class="no-scrollbar max-h-80 overflow-y-auto break-all whitespace-pre-line p-1 text-white bg-gray-900 border-2 border-black">
+        <div class="no-scrollbar max-h-80 overflow-y-auto break-all whitespace-pre-wrap p-1 text-white bg-gray-900 border-2 border-black">
           {selectedTask.result.length > 0 ? selectedTask.result : "[Task returned no result]"}
         </div>
       {/if}

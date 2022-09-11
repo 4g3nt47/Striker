@@ -10,18 +10,19 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
-import {Server} from 'socket.io';
+import {setupWS} from './lib/ws-server.js';
 import {output} from './lib/utils.js';
-import User, {setupSession, getUserByToken} from './models/user.js';
+import User, {setupSession} from './models/user.js';
 import userRoute from './routes/user.js';
 import agentRoute from './routes/agent.js';
-import * as taskModel from './models/task.js';
 
 // .env
 const DB_URL = process.env.DB_URL;
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.SECRET;
-const ORIGIN_URL = process.env.ORIGIN_URL;
+global.ORIGIN_URL = process.env.ORIGIN_URL;
+global.REGISTRATION_KEY = process.env.REGISTRATION_KEY;
+global.AGENT_DELAY = parseInt(process.env.AGENT_DELAY);
 
 // Setup express
 const app = express();
@@ -61,6 +62,8 @@ app.use(async (req, res, next) => {
   if (req.session.loggedIn){
     try{
       const user = await User.findOne({username: req.session.username});
+      if (!user)
+        throw new Error("Invalid user: " + req.session.username);
       setupSession(req.session, user);
     }catch(error){
       req.session.destroy();
@@ -95,53 +98,6 @@ mongoose.connect(DB_URL).then(() => {
     output("Server started on port: " + PORT);
   });
 
-  /**
-   * Setup the ws server
-   */
-
-  const users = {}; // Used to map connected socket IDs to user names.
-  global.socketObjects = {}; // Used to map usernames to connected socket objects.
-
-  // Create the ws server, and make it global.
-  global.socketServer = new Server(httpServer, {
-    cors: {
-      origin: ORIGIN_URL,
-      methods: ["GET", "POST"]
-    }
-  });
-
-  // Define an auth middleware.
-  socketServer.use((socket, next) => {
-
-    const token = socket.handshake.auth.token;
-    if (!token)
-      return next(new Error("Access denied!"));
-    // Authenticate.
-    getUserByToken(token).then(user => {
-      users[socket.id] = user.username;
-      next();
-    }).catch(error => {
-      return next(new Error("Access denied!"));
-    });
-  });
-
-  // Handle connections.
-
-  socketServer.on('connection', (client) => {
-
-    const username = users[client.id];
-    socketObjects[username] = client;
-    output(`New ws connection for ${username}: ${client.id}`);
-
-    // For creating a new task by users.
-    client.on("create_task", (data) => {
-      taskModel.createTask(username, data).then(task => {
-        socketServer.emit("new_task", task);
-      }).catch(error => {
-        client.emit("striker_error", error.message);
-      });
-    });
-
-  });
+  setupWS(httpServer);
 
 });

@@ -7,7 +7,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 import User, * as model from '../models/user.js';
 
-const REGISTRATION_KEY = process.env.REGISTRATION_KEY;
+const REGISTRATION_KEY = global.REGISTRATION_KEY;
+const PERM_ERROR = {error: "Permission denied!"}
 
 export const createUser = (req, res) => {
   
@@ -37,12 +38,13 @@ export const loginUser = (req, res) => {
 
 export const logoutUser = (req, res) => {
   
+  const socketObjects = global.socketObjects;
   if (req.session.loggedIn){
     socketObjects[req.session.username].disconnect(true); // Close the web socket connection for the user.
     model.deleteToken(req.session.username);
     req.session.destroy();
     return res.json({success: "You have been logged out!"});
   }else{
-    return res.status(403).json({error: "Permission denied!"});
+    return res.status(403).json(PERM_ERROR);
   }
 };
