@@ -83,11 +83,12 @@ export const getAllTasks = (req, res) => {
  * Used by agents to receive all their queued tasks.
  * Note: It will also mark all the tasks sent as 'received'.
  */
-export const getPendingTasks = (req, res) => {
+export const getPendingTasks = async (req, res) => {
 
-  const agentID = req.params.uid;
-  agentModel.updateLastSeen(agentID);
-  taskModel.getPendingTasks(agentID).then(tasks => {
+  try{
+    const agentID = req.params.uid;
+    await agentModel.updateLastSeen(agentID);
+    const tasks = await taskModel.getPendingTasks(agentID);
     // Mark them as received.
     for (let task of tasks){
       try{
@@ -97,9 +98,9 @@ export const getPendingTasks = (req, res) => {
       }
     }
     return res.json(tasks);
-  }).catch(error => {
+  }catch(error){
     return res.json([]);
-  })
+  };
 };
 
 /**
@@ -157,10 +158,41 @@ export const freezeAgent = (req, res) => {
 export const unfreezeAgent = (req, res) => {
 
   if (req.session.loggedIn !== true)
-    return res.status(403).json({error: "Permission denied"});
+    return res.status(403).json(PERM_ERROR);
   const agentID = req.param.uid;
   agentModel.unfreezeAgent(agentID).then(data => {
     return res.json({success: "Agent unfrozen!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+/**
+ * Delete an agent.
+ */
+export const deleteAgent = async (req, res) => {
+
+  if (req.session.loggedIn !== true)
+    return res.status(403).json(PERM_ERROR);
+  const agentID = req.params.uid;
+  try{
+    await agentModel.deleteAgent(agentID, req.session.username);
+    await taskModel.deleteAllTasks(agentID);
+    return res.json({success: "Agent deleted!"});
+  }catch(error){
+    return res.status(403).json({error: error.message});
+  }
+};
+
+/**
+ * Delete a task.
+ */
+export const deleteTask = (req, res) => {
+
+  if (req.session.loggedIn !== true)
+    return res.status(403).json(PERM_ERROR);
+  taskModel.deleteTask(req.params.agentID, req.params.taskID, req.session.username).then(data => {
+    return res.json({success: "Task deleted!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
   });

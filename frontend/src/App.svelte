@@ -57,10 +57,15 @@
     saveSession();
   };
 
-  // Handles page switch event.
-  const switchPage = (e) => {
-    session.page = e.detail;
+  // Switch page.
+  const switchPage = (newPage) => {
+    session.page = newPage;
     saveSession();
+  }
+
+  // Handles page switch event.
+  const switchPageHandler = (e) => {
+    switchPage(e.detail);
   }
 
   // Called after a successful login
@@ -166,6 +171,11 @@
       removeTask(data.agentID, data.taskID);
     });
 
+    // Called when an agents gets deleted.
+    socket.on('agent_deleted', (data) => {
+      removeAgent(data.agentID)
+    });
+
     // For writing some text to the console of an agent.
     socket.on('agent_console_output', (data) => {
       updateConsoleMessage(data.agentID, data.msg);
@@ -216,6 +226,24 @@
     }
   };
 
+  // Remove an agent from local cache. Called after an agent has been deleted.
+  const removeAgent = (agentID) => {
+
+    for (let i = 0; i < agents.length; i++){
+      if (agents[i].uid === agentID){
+        agents.splice(i, 1);
+        tasks[agentID] = [];
+        if (selectedAgent && selectedAgent.uid === agentID){
+          selectedAgent = null;
+          selectedAgentTasks = null;
+          if (session.page === "agentPage")
+            switchPage("agents");
+        }
+        return;
+      }
+    }
+  };
+
   // Remove a task from local cache. Called after a task has been deleted.
   const removeTask = (agentID, taskID) => {
 
@@ -236,7 +264,7 @@
 
     selectedAgent = e.detail;
     selectedAgentTasks = tasks[selectedAgent.uid];
-    session.page = "agentPage";
+    switchPage("agentPage");
   };
 
   // Update the console message of a agent.
@@ -277,15 +305,22 @@
   let socket = null;
   let session = loadSession();
   if (session.loggedIn)
-    setupC2();
+    setupC2(); // Reload C2 data since we already logged in.
+  
+  if (["agentPage"].indexOf(session.page) !== -1){ // Pages we shouldn't resume a session in
+    if (session.loggedIn)
+      session.page = "agents";
+    else
+      session.page = "login";
+  }
 
 </script>
 
 <div>
   {#if (session.page === "login")}
-    <Login {session} on:switchPage={switchPage} on:loggedIn={loggedIn}/>
+    <Login {session} on:switchPage={switchPageHandler} on:loggedIn={loggedIn}/>
   {:else if (session.page === "register")}
-    <Register {session} on:switchPage={switchPage}/>
+    <Register {session} on:switchPage={switchPageHandler}/>
   {:else}
     <div class="main-body no-scrollbar w-full grid grid-cols-6">
       <!-- Header -->
@@ -296,15 +331,15 @@
       <!-- The side nav -->
       <div class="page-nav bg-gray-900 border-gray-300 text-gray-300 col-span-1 pl-5 pt-10 shadow-md shadow-black">
         <ul class="main-nav">
-          <li on:click={() => session.page = "agents"}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
-          <li on:click={() => session.page = "tasks"}><Fa icon={icons.faListCheck} class="inline-block w-10"/>Tasks</li>
-          <li on:click={() => session.page = "listeners"}><Fa icon={icons.faMicrophone} class="inline-block w-10"/>Listeners</li>
-          <li on:click={() => session.page = "redirectors"}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
+          <li on:click={() => switchPage("agents")}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
+          <li on:click={() => switchPage("tasks")}><Fa icon={icons.faListCheck} class="inline-block w-10"/>Tasks</li>
+          <li on:click={() => switchPage("listeners")}><Fa icon={icons.faMicrophone} class="inline-block w-10"/>Listeners</li>
+          <li on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
-            <li on:click={() => session.page = "admin"}><Fa icon={icons.faCrown} class="inline-block w-10"/>Admin</li>
-            <li on:click={() => session.page = "users"}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
-            <li on:click={() => session.page = "logs"}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Logs</li>
+            <li on:click={() => switchPage("admin")}><Fa icon={icons.faCrown} class="inline-block w-10"/>Admin</li>
+            <li on:click={() => switchPage("users")}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
+            <li on:click={() => switchPage("logs")}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Logs</li>
           {/if}
           <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10"/>Logout</li>
         </ul>

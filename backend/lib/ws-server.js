@@ -52,7 +52,7 @@ export const setupWS = (httpServer) => {
     output(`New ws connection for ${username}: ${client.id}`);
 
     /**
-     * For processing raw console inputs from users. 
+     * For processing raw agent console inputs from users. 
      * Note that some inputs are handled completely in the client side.
      * Both input and results are broadcasted to all connected users.
      */
@@ -66,7 +66,7 @@ export const setupWS = (httpServer) => {
           agentID,
           msg: `${username} > ${input}`
         });
-        if (input.startsWith("system ")){ // For creating shell
+        if (input.startsWith("system ")){ // Create a system command task
           let cmd = input.substr(7).trim();
           const taskData = {
             agentID,
@@ -79,26 +79,23 @@ export const setupWS = (httpServer) => {
             client.emit("striker_error", error.message);
           });
         }else if (input === "freeze"){ // Freeze an agent.
-          agentModel.freezeAgent(agentID).then(data => {
-            if (data !== null){
-              socketServer.emit("agent_console_output", {
-                agentID,
-                msg: serverPrompt + "Agent frozen by user: " + username
-              });
-            }
-          }).catch(error => {
+          agentModel.freezeAgent(agentID, username).catch(error => {
             client.emit("striker_error", error.message);
           });
         }else if (input === "unfreeze"){ // Unfreeze an agent.
-          agentModel.unfreezeAgent(agentID).then(data => {
-            if (data !== null){
-              socketServer.emit("agent_console_output", {
-                agentID,
-                msg: serverPrompt + "Agent unfrozen by user: " + username
-              });
-            }
-          }).catch(error => {
+          agentModel.unfreezeAgent(agentID, username).catch(error => {
             client.emit("striker_error", error.message);
+          });
+        }else if (input.startsWith("delete task ")){ // Delete a task.
+          let taskID = input.substr(12).trim();
+          taskModel.deleteTask(agentID, taskID, username).catch(error => {
+            client.emit("striker_error", error.message);
+          });
+        }else if (input === "delete agent"){ // Delete the agent.
+          agentModel.deleteAgent(agentID, username).then(() => {
+            return taskModel.deleteAllTasks(agentID);
+          }).catch(error => {
+            socketServer.emit("striker_error", error.message);
           });
         }else{ // Unknown query
           socketServer.emit("agent_console_output", {

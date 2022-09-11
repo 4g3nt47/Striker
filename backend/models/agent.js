@@ -111,14 +111,14 @@ export const getAgent = async (agentID) => {
  * Update the last seen time of an agent. Emits the "update_agent" ws event on success.
  * Should be called whenever an agent checks in to receive new tasks.
  * @param {string} agentID - ID of the agent.
- * @return {object} The updated agent, null if not valid.
+ * @return {object} The updated agent.
  */
 export const updateLastSeen = async (agentID) => {
   
   const socketServer = global.socketServer;
   const agent = await Agent.findOne({uid: agentID.toString()});
   if (!agent)
-    return null;
+    throw new Error("Invalid agent!");
   agent.lastSeen = Date.now();
   await agent.save();
   socketServer.emit("update_agent", agent);
@@ -126,35 +126,65 @@ export const updateLastSeen = async (agentID) => {
 };
 
 /**
- * Freeze an agent. Emits the "update_agent" ws event on success.
+ * Freeze an agent. Emits the "update_agent" ws event on success and also update users console.
  * @param {string} agentID - The ID of the agent.
- * @return {object} The frozen agent, null if invalid or already frozen.
+ * @param {string} username - The user requesting the action.
+ * @return {object} The frozen agent.
  */
-export const freezeAgent = async (agentID) => {
+export const freezeAgent = async (agentID, username) => {
   
   const socketServer = global.socketServer;
   const agent = await Agent.findOne({uid: agentID.toString()});
   if (!(agent && agent.frozen === false))
-    return null;
+    throw new Error("Invalid or already frozen agent!");
   agent.frozen = true;
   await agent.save();
   socketServer.emit("update_agent", agent);
+  socketServer.emit("agent_console_output", {
+    agentID: agentID.toString(),
+    msg: global.serverPrompt + `Agent frozen by ${username}`
+  });
   return agent;
 };
 
 /**
- * Unfreeze an agent. Emits the "update_agent" ws event on success.
+ * Unfreeze an agent. Emits the "update_agent" ws event on success and also update users console.
  * @param {string} agentID - The ID of the agent.
- * @return {object} The unfrozen agent, null if invalid or if agent was not frozen.
+ * @param {string} username - The user requesting the action.
+ * @return {object} The unfrozen agent.
  */
-export const unfreezeAgent = async (agentID) => {
+export const unfreezeAgent = async (agentID, username) => {
 
   const socketServer = global.socketServer;
   const agent = await Agent.findOne({uid: agentID.toString()});
   if (!(agent && agent.frozen === true))
-    return null;
+    throw new Error("Invalid or already unfrozen agent!");
   agent.frozen = false;
   await agent.save();
   socketServer.emit("update_agent", agent);
+  socketServer.emit("agent_console_output", {
+    agentID: agentID.toString(),
+    msg: global.serverPrompt + `Agent unfrozen by '${username}'`
+  });
   return agent;
+};
+
+/**
+ * Delete an agent. Emits the "agent_deleted" ws event on success.
+ * Warning: This DOES NOT delete existing tasks. Caller should also call the `deleteAllTasks` of the task model.
+ * @param {string} agentID - The ID of the target agent.
+ * @param {string} username - The user requesting the action.
+ * @return {object} The query result.
+ */
+export const deleteAgent = async (agentID, username) => {
+
+  const socketServer = global.socketServer;
+  const data = await Agent.deleteOne({uid: agentID.toString()});
+  if (data.deletedCount === 0)
+    throw new Error("Invalid agent!");
+  socketServer.emit("agent_deleted", {
+    agentID: agentID.toString(),
+    user: username
+  });
+  return data;
 };
