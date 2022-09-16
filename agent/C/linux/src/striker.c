@@ -46,7 +46,9 @@ char *buffer_to_string(buffer *buff){
   char *str = malloc(sizeof(char) * (buff->used + 1));
   if (buff->used == 0)
     return NULL;
-  return strncpy(str, buff->buffer, buff->used);
+  strncpy(str, buff->buffer, buff->used);
+  str[buff->used] = '\0';
+  return str;
 }
 
 void free_buffer(buffer *buff){
