@@ -3,3 +3,4 @@ backend/node_modules
 frontend/.env
 frontend/node_modules
 frontend/dist
+agent/C/linux/bin/*
