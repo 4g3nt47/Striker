@@ -200,6 +200,8 @@ export const markReceived = async (taskID) => {
  */
 export const setResult = async (taskID, result) => {
 
+  if (!result)
+    result = "[Empty result]";
   const socketServer = global.socketServer;
   const task = await Task.findOne({uid: taskID.toString()});
   if (!(task && task.completed === false))

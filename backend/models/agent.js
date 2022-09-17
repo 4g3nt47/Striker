@@ -14,7 +14,7 @@ const agentSchema = mongoose.Schema({
   delay: {
     type: Number,
     required: true,
-    default: 10000
+    default: 5
   },
   os: {
     type: String,

@@ -64,7 +64,7 @@ class Striker:
       uid = self.config['uid']
       delay = int(self.config['delay'])
       while True:
-        time.sleep(delay / 1000.0)
+        time.sleep(delay)
         results = []
         rsp = ""
         try:
