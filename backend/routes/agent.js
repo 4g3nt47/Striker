@@ -7,7 +7,7 @@ import {Router} from 'express';
 import {
   getAgent, getAgents, agentInit, freezeAgent, unfreezeAgent, deleteAgent,
   createTask, getAllTasks, getPendingTasks, getTasks, setTasksResults, deleteTask,
-  uploadFile, getAgentFiles
+  uploadFile, downloadFile, getAgentFiles
 } from '../controllers/agent.js';
 
 const router = Router();
@@ -15,21 +15,22 @@ const router = Router();
 // Task routes.
 router.post("/tasks", createTask);
 router.get("/tasks", getAllTasks);
-router.get("/tasks/:uid", getPendingTasks);
-router.get("/tasks/:uid/all", getTasks);
-router.post("/tasks/:uid", setTasksResults);
-router.delete("/tasks/:uid", deleteTask);
+router.get("/tasks/:agentID", getPendingTasks);
+router.get("/tasks/:agentID/all", getTasks);
+router.post("/tasks/:agentID", setTasksResults);
+router.delete("/tasks/:agentID/:taskID", deleteTask);
 
 // Agent routes
 router.get("/", getAgents);
-router.get("/:uid", getAgent);
+router.get("/:agentID", getAgent);
 router.post("/init", agentInit);
-router.get("/freeze/:uid", freezeAgent);
-router.get("/unfreeze/:uid", unfreezeAgent);
-router.delete("/:uid", deleteAgent);
+router.get("/freeze/:agentID", freezeAgent);
+router.get("/unfreeze/:agentID", unfreezeAgent);
+router.delete("/:agentID", deleteAgent);
 
 // File routes
-router.get("/files/:uid", getAgentFiles);
-router.post("/upload/:agentID/:taskID", uploadFile);
+router.get("/files/:agentID", getAgentFiles);
+router.post("/upload/:agentID", uploadFile);
+router.get("/download/:fileID", downloadFile);
 
 export default router;

@@ -1,6 +1,9 @@
 backend/.env
 backend/node_modules
+backend/static/files/
+
 frontend/.env
 frontend/node_modules
 frontend/dist
+
 agent/C/linux/bin/*

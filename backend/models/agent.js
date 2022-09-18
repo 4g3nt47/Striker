@@ -171,7 +171,7 @@ export const unfreezeAgent = async (agentID, username) => {
 
 /**
  * Delete an agent. Emits the "agent_deleted" ws event on success.
- * Warning: This DOES NOT delete existing tasks. Caller should also call the `deleteAllTasks` of the task model.
+ * Warning: This DOES NOT delete existing tasks or other agent data. Caller should handle that.
  * @param {string} agentID - The ID of the target agent.
  * @param {string} username - The user requesting the action.
  * @return {object} The query result.

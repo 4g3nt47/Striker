@@ -108,6 +108,7 @@
       if (res.status != 200){
         throw new Error(data.error);
       }
+      // No need to restore button since successful delete will kick us back to agents list page.
     }catch(err){
       infoPageError = err.message;
       deleteAgentBtn.disabled = false;
@@ -117,7 +118,7 @@
 
 </script>
 
-<div class="border-2 border-gray-900 min-h-full max-h-full no-scrollbar overflow-y-auto">
+<div class="border-2 border-gray-900 min-h-full max-h-full no-scrollbar overflow-y-auto overflow-x-hidden">
 
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
@@ -127,7 +128,7 @@
   </ul>
 
   <!-- A div to wrap all our tabs -->
-  <div class="m-3 text-lg">
+  <div class="m-3 text-lg no-scrollbar overflow-x-auto">
     <!-- Render the current tab -->
     {#if (currTab === "Info")}
       <table class="w-full border-2 border-black text-left font-mono">

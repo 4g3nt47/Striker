@@ -86,7 +86,7 @@
       </table>
       <!-- Task Data and result -->
       <p>Task Data:</p>
-      <div class="no-scrollbar max-h-80 overflow-y-auto p-1 text-white break-all bg-gray-900 border-2 border-black">
+      <div class="no-scrollbar max-h-80 overflow-y-auto p-1 text-white whitespace-pre-wrap break-all bg-gray-900 border-2 border-black">
         {selectedTaskData}
       </div>
       {#if (selectedTask.completed)}
@@ -120,7 +120,7 @@
         <td class="pl-2">{task.uid}</td>
         <td class="pl-2">{task.taskType}</td>
         <td class="pl-2">{task.owner}</td>
-        <td class={`pl-2 font-bold ${task.received ? 'text-blue-700' : ''}`}>{task.received ? "yes" : "no"}</td>
+        <td class={`pl-2 font-bold ${task.received || task.completed ? 'text-blue-700' : ''}`}>{task.received || task.completed ? "yes" : "no"}</td>
         <td class={`pl-2 font-bold ${task.completed ? 'text-green-700' : ''}`}>{task.completed ? "yes" : "no"}</td>
       </tr>
     {/each}
