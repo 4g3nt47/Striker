@@ -1,0 +1,22 @@
+127.0.0.1	localhost debian wordpress.debian phpmyadmin.debian
+
+# The following lines are desirable for IPv6 capable hosts
+::1     ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+# My docker hosts
+172.17.0.2	buster cachet.buster
+172.17.0.3	alpine
+
+# HTB Hosts
+
+10.10.11.155 talkative.htb
+10.10.11.126 unicode.htb hackmedia.htb
+10.10.11.154 retired.htb
+10.10.11.166 trick.htb root.trick.htb preprod-payroll.trick.htb
+10.10.11.176 health.htb
+10.10.11.178 vessel.htb openwebanalytics.vessel.htb
+
+# THM hosts
+10.10.16.230 kenobi

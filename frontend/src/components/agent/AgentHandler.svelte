@@ -19,33 +19,55 @@
   import * as icons from '@fortawesome/free-solid-svg-icons';
   import TasksList from './TasksList.svelte';
   import Button from '../Button.svelte';
+  import ErrorMsg from '../ErrorMsg.svelte';
+  import AgentFiles from './AgentFiles.svelte';
 
+  export let session = {};
   export let socket = null;
   export let agent = {};
   export let tasks = [];
   export let consoleMsgs = [];
   
   const dispatch = createEventDispatcher();
-  let tabs = ["Info", "Tasks", "Console"]
+  let tabs = ["Info", "Tasks", "Console", "Files"];
   let currTab = tabs[0];
   let consoleCommand = "";
   let consoleText = "";
   let msgCount = 0;
+  let deleteAgentBtn = null;
+  let infoPageError = "";
 
+  // Updates our console text. Called whenever `consoleMsgs` changes. 
   const updateConsole = (consoleMsgs) => {
     
     if (msgCount === consoleMsgs.length) // A hacky solution for an autoscroll bug when nothing changes
       return;
     msgCount = consoleMsgs.length;
     consoleText = consoleMsgs.join("\n");
-    // Scroll to bottom.
-    let elem = document.getElementById('console-text');
-    if (elem)
-      setTimeout(() => elem.scrollTop = elem.scrollHeight, 50); // Need the function to return before this code is run else the last line will not be visible.
+    consoleToBottom();
+  };
+
+  // Scroll to the bottom of the console display.
+  const consoleToBottom = () => {
+
+    setTimeout(() => {
+      let elem = document.getElementById('console-text');
+      if (elem)
+        elem.scrollTop = elem.scrollHeight;
+    }, 70);
   };
 
   // A reactive expression to update render new console messages.
   $: updateConsole(consoleMsgs);
+
+  // Handles tab switch.
+  const switchTab = (newTab) => {
+
+    infoPageError = "";
+    currTab = newTab;
+    if (currTab === "Console")
+      consoleToBottom();
+  };
 
   /**
    * Execute the command entered in the console.
@@ -68,6 +90,31 @@
     consoleCommand = "";
   };
 
+  /**
+   * Called when a user clicks on the `Delete Agent` button in the info page.
+   */
+  const deleteAgent = async () => {
+
+    if (!confirm(`Delete agent '${agent.uid}'?`))
+      return;
+    deleteAgentBtn.innerText = "Deleting agent...";
+    deleteAgentBtn.disabled = true;
+    try{
+      const res = await fetch(`${session.api}/agent/${agent.uid}`, {
+        credentials: "include",
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (res.status != 200){
+        throw new Error(data.error);
+      }
+    }catch(err){
+      infoPageError = err.message;
+      deleteAgentBtn.disabled = false;
+      deleteAgentBtn.innerText = "Delete Agent";
+    }
+  };
+
 </script>
 
 <div class="border-2 border-gray-900 min-h-full max-h-full no-scrollbar overflow-y-auto">
@@ -75,7 +122,7 @@
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
     {#each tabs as tab, index}
-      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-green-300 bg-gray-300 text-gray-900" : ""}`} on:click={() => currTab = tab}>{tab}</li>
+      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-green-300 bg-gray-300 text-gray-900" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
     {/each}
   </ul>
 
@@ -121,11 +168,17 @@
           <td class={agent.frozen ? "text-cyan-700" : ""}>{agent.frozen}</td>
         </tr>        
       </table>
+      <div class="w-1/5 my-2 mx-auto">
+        <Button type="danger" bind:btn={deleteAgentBtn} on:click={deleteAgent}>Delete Agent</Button>
+      </div>
+      <ErrorMsg error={infoPageError}/>
     {:else if (currTab === "Tasks")}
       <TasksList {socket} {tasks}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
-      <input class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec}>        
+      <input class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec}> 
+    {:else if (currTab === "Files")}
+      <AgentFiles {session} {agent}/>
     {/if}
   </div>
 </div>

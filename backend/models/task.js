@@ -58,7 +58,7 @@ export default Task;
 /**
  * Create a new task. Emits "new_task" ws event on success.
  * @param {string} owner - The task owner (username of the user that creates the task)
- * @param {object} data - The request body received.
+ * @param {object} data - The task data (agentID, taskType, and data)
  * @return {object} The task created.
  */
 export const createTask = async (owner, data) => {
@@ -80,7 +80,7 @@ export const createTask = async (owner, data) => {
   socketServer.emit("new_task", task);
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
-    msg: global.serverPrompt + `Task '${task.uid}' created by '${task.owner}'`
+    msg: global.serverPrompt + `Task '${task.uid}' (${taskType}) created by '${task.owner}'`
   });
   return task;
 };
@@ -188,7 +188,7 @@ export const markReceived = async (taskID) => {
   socketServer.emit("update_task", task);
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
-    msg: global.serverPrompt + `Task '${task.uid}' received by agent`
+    msg: global.serverPrompt + `Task '${task.uid}' (${task.taskType}) received by agent`
   });
   return task;
 };
@@ -201,7 +201,7 @@ export const markReceived = async (taskID) => {
 export const setResult = async (taskID, result) => {
 
   if (!result)
-    result = "[Empty result]";
+    result = "";
   const socketServer = global.socketServer;
   const task = await Task.findOne({uid: taskID.toString()});
   if (!(task && task.completed === false))
@@ -214,9 +214,12 @@ export const setResult = async (taskID, result) => {
   task.result = result;
   await task.save();
   socketServer.emit("update_task", task);
+  let message = global.serverPrompt + `Task '${task.uid}' (${task.taskType}) completed`
+  if (task.result.length > 0)
+    message += `. ${task.result.length} bytes received;\n${task.result}`
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
-    msg: global.serverPrompt + `Task completed '${task.uid}'. ${task.result.length} bytes received.\n${task.result}`
+    msg: message
   });
   return task;
 };

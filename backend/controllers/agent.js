@@ -3,11 +3,40 @@
  * @author Umar Abdul
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+import crypto from 'crypto';
+import path from 'path';
+import multer from 'multer';
 import Agent, * as agentModel from '../models/agent.js';
 import Task, * as taskModel from '../models/task.js';
+import File, * as fileModel from '../models/file.js';
 
 // A generic error message for requests that got denied due to perm issues.
 const PERM_ERROR = {error: "Permission denied!"};
+
+// Configure multer for file upload.
+const MAX_UPLOAD_SIZE = process.env.MAX_UPLOAD_SIZE || 102400000;
+const orgFilenames = {}; // For temporarily mapping unique file IDs to their original name.
+
+const storage = multer.diskStorage({
+  destination: "static/files/",
+  filename: (req, file, callback) => {
+    let orgName = path.basename(path.resolve(file.originalname)).trim();
+    if (orgName.length === 0)
+      orgName = "untitled";
+    const uid = crypto.randomBytes(16).toString('hex');
+    orgFilenames[uid] = orgName;
+    callback(null, uid);
+  }
+});
+
+const uploader = multer({
+  storage,
+  limits: {
+    fileSize: MAX_UPLOAD_SIZE
+  }
+}).single('file');
 
 /**
  * Create a new agent. Called when a new agent calls home.
@@ -144,7 +173,7 @@ export const freezeAgent = (req, res) => {
 
   if (req.session.loggedIn !== true)
     return res.status(403).json(PERM_ERROR);
-  const agentID = req.param.uid;
+  const agentID = req.params.uid;
   agentModel.freezeAgent(agentID).then(data => {
     return res.json({success: "Agent frozen!"});
   }).catch(error => {
@@ -159,7 +188,7 @@ export const unfreezeAgent = (req, res) => {
 
   if (req.session.loggedIn !== true)
     return res.status(403).json(PERM_ERROR);
-  const agentID = req.param.uid;
+  const agentID = req.params.uid;
   agentModel.unfreezeAgent(agentID).then(data => {
     return res.json({success: "Agent unfrozen!"});
   }).catch(error => {
@@ -178,10 +207,12 @@ export const deleteAgent = async (req, res) => {
   try{
     await agentModel.deleteAgent(agentID, req.session.username);
     await taskModel.deleteAllTasks(agentID);
+    // TODO: Add files deletion.
     return res.json({success: "Agent deleted!"});
   }catch(error){
     return res.status(403).json({error: error.message});
   }
+  // No need to restore button since successful delete will kick us back to agents list page.
 };
 
 /**
@@ -193,6 +224,56 @@ export const deleteTask = (req, res) => {
     return res.status(403).json(PERM_ERROR);
   taskModel.deleteTask(req.params.agentID, req.params.taskID, req.session.username).then(data => {
     return res.json({success: "Task deleted!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+/**
+ * For obtaining all files for an agent.
+ */
+export const getAgentFiles = (req, res) => {
+
+  if (req.session.loggedIn !== true)
+    return res.status(403).json(PERM_ERROR);
+  const agentID = req.params.uid;
+  fileModel.getAgentFiles(agentID).then(files => {
+    return res.json(files);
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+/**
+ * Used by agents to upload files to the server.
+ */
+export const uploadFile = (req, res) => {
+  
+  const socketServer = global.socketServer;
+  const agentID = req.params.agentID.toString();
+  agentModel.getAgent(agentID).then(agent => {
+    uploader(req, res, async (error) => {
+      if (error){
+        console.log("Upload error:");
+        console.log(err);
+        return res.status(403).json({error: error.message});
+      }
+      const uid = path.basename(req.file.path);
+      const orgName = orgFilenames[uid];
+      const file = new File({
+        uid,
+        agentID: agentID,
+        name: orgName,
+        dateCreated: Date.now()
+      });
+      await file.save();
+      delete orgFilenames[uid];
+      socketServer.emit("agent_console_output", {
+        agentID: agentID.toString(),
+        msg: global.serverPrompt + `File received: ${uid} - ${orgName}`
+      });
+      return res.json({success: "File uploaded!"});
+    });
   }).catch(error => {
     return res.status(403).json({error: error.message});
   });

