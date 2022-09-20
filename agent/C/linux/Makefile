@@ -10,8 +10,11 @@ bin/striker_utils.o: src/striker_utils.c src/striker_utils.h
 bin/cJSON.o: src/cJSON.c src/cJSON.h
 	gcc -Os -c -Wall src/cJSON.c -o bin/cJSON.o
 
-builder: src/builder.c src/builder.h
-	gcc -Os -s -Wall src/builder.c -o bin/builder
+builder: src/builder.c bin/obfuscator.o
+	gcc -Os -s -Wall src/builder.c bin/obfuscator.o -o bin/builder
+
+bin/obfuscator.o: src/obfuscator.c src/obfuscator.h
+	gcc -Os -c -Wall src/obfuscator.c -o bin/obfuscator.o
 
 clean:
 	rm bin/*

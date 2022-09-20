@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 /**
  * A struct for working with buffers.
  * `buffer` is the buffer (very helpful :)
@@ -52,5 +51,14 @@ char *buffer_to_string(buffer *buff);
 
 // Free a buffer. Called when a buffer is no longer needed.
 void free_buffer(buffer *buff);
+
+// Find the absolute offset of `target` that is `len` bytes long inside file `rfo`. Returns -1 if not found.
+ssize_t find_offset(FILE *rfo, const void *target, size_t len);
+
+// Copy `len` bytes from file `src` into `dest`
+ssize_t filecpy(FILE *dest, FILE *src, size_t len);
+
+// Keep reading from a file file until a NULL byte or EOF. Return the number of bytes read.
+size_t read_until_null(FILE *rfo);
 
 #endif // STRIKER_UTILS_H

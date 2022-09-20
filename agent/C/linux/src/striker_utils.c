@@ -1,8 +1,10 @@
 /**
- *------------------------------
- * Shared utilities for Striker.
- *            Author: Umar Abdul
- *------------------------------
+ *--------------------------------------------------------------
+ *   Shared utilities for Striker. This should be kept as small
+ * as possible to avoid bloating the implant. Utilities that the
+ * agent does not use should not be implemented here.
+ *                                            Author: Umar Abdul
+ *--------------------------------------------------------------
  */
 
 #include "striker_utils.h"
@@ -62,4 +64,52 @@ void free_buffer(buffer *buff){
   buff->used = 0;
   free(buff->buffer);
   free(buff);
+}
+
+long find_offset(FILE *rfo, const void *target, size_t len){
+
+  void *buff = malloc(len);
+  int c;
+  size_t n = fread(buff, 1, len, rfo);
+  if (!n)
+    return -1;
+  while (1){
+    if (!memcmp(buff, target, len)){
+      free(buff);
+      return ftell(rfo) - len;
+    }
+    for (int i = 1; i < len; i++)
+      *((unsigned char *)buff + (i - 1)) = *((unsigned char *)buff + i);
+    c = fgetc(rfo);
+    if (c == EOF)
+      break;
+    *((unsigned char *)buff + (len - 1)) = c;
+  }
+  free(buff);
+  return -1;
+}
+
+ssize_t filecpy(FILE *dest, FILE *src, size_t len){
+
+  size_t n;
+  int c;
+  for (n = 0; n < len; n++){
+    if ((c = fgetc(src)) == EOF)
+      break;
+    fputc(c, dest);
+  }
+  return n;
+}
+
+size_t read_until_null(FILE *rfo){
+
+  size_t n = 0;
+  int c;
+  while (!feof(rfo)){
+    c = fgetc(rfo);
+    if (c == EOF || c == 0)
+      break;
+    n++;
+  }
+  return n;
 }
