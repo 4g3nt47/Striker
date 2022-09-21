@@ -44,7 +44,7 @@ char *obfs_decode(unsigned char key, char str[]){
   return str;
 }
 
-ssize_t obfs_find_offset(FILE *rfo, const void *target, size_t len){
+long obfs_find_offset(FILE *rfo, const void *target, size_t len){
 
   void *buff = malloc(len);
   int c;
@@ -98,36 +98,36 @@ void obfs_run(FILE *dest, FILE *src, unsigned char key, short int verbose){
   if (verbose)
     printf("[*] Finding strings marked for obfuscation...\n");
   unsigned short marker_len = strlen(OBFS_MARKER);
-  ssize_t *offsets = malloc(sizeof(ssize_t) * OBFS_MAX_OFFSETS_COUNT * 2);
-  size_t offsets_count = 0;
-  size_t target_len;
+  long *offsets = malloc((OBFS_MAX_OFFSETS_COUNT * 2) * sizeof(long));
+  unsigned int offsets_count = 0;
+  long target_len;
   int c;
   for (int index = 0; index < OBFS_MAX_OFFSETS_COUNT && (!feof(src)); index++){
-    ssize_t offset = obfs_find_offset(src, OBFS_MARKER, marker_len);
+    long offset = obfs_find_offset(src, OBFS_MARKER, marker_len);
     if (offset == -1)
       break;
     // `src` if now pointed to the beginning of a target string (with the marker skipped).
     target_len = obfs_read_until_null(src);
-    *(offsets + (index * OBFS_MAX_OFFSETS_COUNT)) = offset;
-    *(offsets + (index * OBFS_MAX_OFFSETS_COUNT) + 1) = target_len + marker_len;
+    *(offsets + (index * 2)) = offset;
+    *(offsets + (index * 2 + 1)) = target_len + marker_len;
     offsets_count++;
   }
   if (verbose)
-    printf("[+] %d targets identified!\n", (unsigned int)offsets_count);
+    printf("[+] %d targets identified!\n", offsets_count);
   if (offsets_count == 0)
     goto end;
   if (verbose)
     printf("[*] Obfuscating strings using key: 0x%02x...\n", key);
   rewind(src);
   for (int i = 0; i < offsets_count; i++){
-    size_t offset = *(offsets + (i * OBFS_MAX_OFFSETS_COUNT));
-    size_t target_len = *(offsets + (i * OBFS_MAX_OFFSETS_COUNT) + 1);
+    long offset = *(offsets + (i * 2));
+    long target_len = *(offsets + (i * 2 + 1));
     // Copy all bytes preceding the obfuscated string.
     // This will point `src` to the beginning of the marker, and `dest` to the place our obfuscated string should be.
     obfs_filecpy(dest, src, offset - ftell(src));
     fseek(src, marker_len, SEEK_CUR); // Skip over the marker.
     // Encode the string.
-    size_t org_str_len = target_len - marker_len;
+    long org_str_len = target_len - marker_len;
     char *buff = malloc(target_len); // This also includes the length of the marker, which we will fill with nulls.
     memset(buff, 0, target_len);
     fread(buff, 1, org_str_len, src);
@@ -135,14 +135,14 @@ void obfs_run(FILE *dest, FILE *src, unsigned char key, short int verbose){
     fwrite(buff, 1, target_len, dest); // Write the encoded string with marker removed.
     free(buff);
     if (verbose)
-      printf("[+] Offset 0x%08x : %ld bytes...\n", (unsigned int)offset, org_str_len);
+      printf("[+] Offset 0x%08lx : %ld bytes...\n", offset, org_str_len);
   }
   // Copy the remaining bytes.
   if (verbose)
     printf("[*] Copying remaining bytes...\n");
   while ((c = fgetc(src)) != EOF)
     fputc(c, dest);
-  printf("[+] %ld strings obfuscated :)\n", offsets_count);
+  printf("[+] %d strings obfuscated :)\n", offsets_count);
 
   // We are done :)
   end:

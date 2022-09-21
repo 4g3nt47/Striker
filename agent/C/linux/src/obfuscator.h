@@ -13,7 +13,7 @@
 #include <string.h>
 
 // Maximum number of strings marked for obfuscation to look for.
-#define OBFS_MAX_OFFSETS_COUNT 10
+#define OBFS_MAX_OFFSETS_COUNT 500
 
 /**
  * Handles strign obfuscation. `key` is encoding key, and `str` is the target string.
@@ -29,7 +29,7 @@ char *obfs_encode(unsigned char key, char str[]);
 char *obfs_decode(unsigned char key, char str[]);
 
 // Find the absolute offset of `target` that is `len` bytes long inside file `rfo`
-ssize_t obfs_find_offset(FILE *rfo, const void *target, size_t len);
+long obfs_find_offset(FILE *rfo, const void *target, size_t len);
 
 // Copy `len` bytes from file `src` into `dest`
 size_t obfs_filecpy(FILE *dest, FILE *src, size_t len);

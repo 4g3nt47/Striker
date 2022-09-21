@@ -1,9 +1,9 @@
 /**
- *---------------------------------------------------------------
- *    A preprocessor for the Striker implants.
- * Handles patching, and obfuscation of a newly compiled implant.
- *                                             Author: Umar Abdul
- *---------------------------------------------------------------
+ *--------------------------------------------------------------
+ *    A preprocessor for the Striker implants. Handles patching, 
+ * and obfuscation of a newly compiled implant.
+ *                                            Author: Umar Abdul
+ *--------------------------------------------------------------
  */
 
 #include "obfuscator.h"
@@ -66,12 +66,13 @@ int main(int argc, char **argv){
     fprintf(stderr, "[-] Auth key marker not found!\n");
     return 3;
   }
+  fclose(rfo); // We no longer need this.
   printf("[+] Offsets:\n");
   printf("            URL: 0x%08x\n", (unsigned int)url_offset);
   printf("       OBFS Key: 0x%08x\n", (unsigned int)obfs_key_offset);
   printf("       Auth Key: 0x%08x\n", (unsigned int)auth_key_offset);
 
-  // Use the offsets to encode and apply the patch. We will be reusing output file stream.
+  // Use the offsets to encode and apply the patch. We will be reusing the output file stream.
   printf("[*] Patching...\n");
   // Write the C2 server's URL
   int len = (strlen(url) > strlen(URL_MARKER) ? strlen(url) : strlen(URL_MARKER));
@@ -92,7 +93,8 @@ int main(int argc, char **argv){
   fwrite(buffer, sizeof(char), len, wfo);
   free(buffer);
 
-  fclose(rfo);
+  // And we are done :)
   fclose(wfo);
+  printf("[+] Operation completed!\n");
   return 0;
 }
