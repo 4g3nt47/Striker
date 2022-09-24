@@ -13,8 +13,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <sys/select.h>
 #include <pthread.h>
 #include <curl/curl.h>
 #include "cJSON.h"

