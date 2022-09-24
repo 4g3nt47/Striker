@@ -128,7 +128,7 @@ export const getTasks = (req, res) => {
 /**
  * Used by agents to submit the results of their tasks.
  */
-export const setTasksResults = (req, res) => {
+export const setTasksResults = async (req, res) => {
 
   const agentID = req.params.agentID;
   const results = req.body;
@@ -136,7 +136,7 @@ export const setTasksResults = (req, res) => {
     return res.json({});
   for (let result of results){
     try{
-      taskModel.setResult(result.uid, result.result);
+      await taskModel.setResult(agentID, result);
     }catch(error){
       console.log(error);
     }

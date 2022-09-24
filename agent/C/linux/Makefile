@@ -1,5 +1,5 @@
 bin/striker: bin/striker.o bin/striker_utils.o bin/cJSON.o bin/builder
-	gcc -Os -s -Wall bin/striker.o bin/striker_utils.o bin/cJSON.o -lcurl -o bin/striker
+	gcc -Os -s -Wall bin/striker.o bin/striker_utils.o bin/cJSON.o -lcurl -lpthread -o bin/striker
 
 bin/striker.o: src/striker.c src/striker.h bin/striker_utils.o
 	gcc -Os -c -Wall src/striker.c -o bin/striker.o
