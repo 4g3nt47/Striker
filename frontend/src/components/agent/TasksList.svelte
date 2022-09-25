@@ -28,8 +28,12 @@
     selectedTask = task;
     selectedTaskData = "";
     const keys = selectedTask
-    for (let k of Object.keys(selectedTask.data))
-      selectedTaskData += `${k} => ${selectedTask.data[k]}\n`;
+    if (!selectedTask.data){
+      selectedTaskData = "null";
+    }else{
+      for (let k of Object.keys(selectedTask.data))
+        selectedTaskData += `${k} => ${selectedTask.data[k]}\n`;      
+    }
     selectedTaskData = selectedTaskData.trim();
     showTaskModal = true;
   };

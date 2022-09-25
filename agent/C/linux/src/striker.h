@@ -22,17 +22,12 @@
 #include "cJSON.h"
 #include "striker_utils.h"
 
-/**
- * A struct for tracking session info.
- * `uid` is the agent ID.
- * `delay` is the callback delay in seconds (default: 5)
- * `write_dir` is a full path to a writable directory, which may be used when we have to write something.
- *            Make sure it ends with a '/'.
- */
+// A struct for tracking session info.
 typedef struct{
-  char *uid;
-  unsigned long delay;
-  char *write_dir;
+  char *uid; // The ID of the agent.
+  unsigned long delay; // Callback delay, in seconds.
+  char *write_dir; // Full path to a writable directory.
+  unsigned short abort; // Will be set to 1 if session need to be ended.
 } session;
 
 // A struct for representing a single task.
@@ -43,6 +38,7 @@ typedef struct{
   unsigned short completed; // Indicates if the task has been completed.
   unsigned short queued; // Indicates if the task has been queued.
   cJSON *result; // The result of the task.
+  cJSON *input_json; // The cJSON object used to generate the task.
 } task;
 
 // For decoding obfuscated strings.
@@ -78,6 +74,9 @@ void *keymon(void *ptr);
 
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
+
+// Free a task.
+void free_task(task *tsk);
 
 // Execute a task.
 void execute_task(session *striker, task *t);

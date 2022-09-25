@@ -129,13 +129,15 @@ unsigned short queue_seek(queue *q, size_t pos){
   return 1;
 }
 
-void queue_free(queue *q){
+void queue_free(queue *q, unsigned short items){
   
   q->size = 0;
   q->count = 0;
   q->pos = 0;
-  for (int i = 0; i < q->count; i++)
-    free(q->items[i]);
+  if (items){
+    for (int i = 0; i < q->count; i++)
+      free(q->items[i]);    
+  }
   free(q->items);
   free(q);
 }
