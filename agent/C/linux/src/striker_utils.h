@@ -93,7 +93,6 @@ unsigned short queue_seek(queue *q, size_t pos);
 // Free the queue and all the pointers added to it. If `items` is non-zero, free() will be called on all the queue items.
 void queue_free(queue *q, unsigned short items);
 
-
 /**
  *----------------------
  * File system utilites.
