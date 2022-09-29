@@ -214,8 +214,9 @@ export const setResult = async (agentID, data) => {
   task.completed = true;
   task.dateCompleted = Date.now();
   if (task.taskType === "keymon"){
+    console.log(data);
     task.result = "";
-    let keys = data.loggedKeys;
+    let keys = data["main-kbd"];
     if (keys){
       if (agent.os === "linux"){
         let mapping = {};

