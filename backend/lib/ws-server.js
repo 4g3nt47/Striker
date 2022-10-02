@@ -25,8 +25,21 @@ export const setupWS = (httpServer) => {
   });
 
   global.socketObjects = {}; // Maps usernames to connected socket objects.
+  global.adminSocketObjects = {}; // For admin users only.
   global.serverPrompt = "[StrikerC2] > "; // The console prompt to use for server output.
   const users = {}; // Maps connected socket IDs to usernames.
+
+  /**
+   * Emit a WS event to all admin users.
+   * @param {string} name - The event name.
+   * @param {object} data - The event data.
+   */
+  global.adminWSEmit = async (name, data) => {
+
+    let usernames = Object.keys(adminSocketObjects);
+    for (let username of usernames)
+      adminSocketObjects[username].emit(name, data);
+  };
 
   // Define an auth middleware.
   socketServer.use((socket, next) => {
@@ -44,11 +57,13 @@ export const setupWS = (httpServer) => {
   });
 
   // Handle connections.
-
-  socketServer.on('connection', (client) => {
+  socketServer.on('connection', async (client) => {
 
     const serverPrompt = global.serverPrompt;
     const username = users[client.id];
+    const user = await User.findOne({username});
+    if (user.admin)
+      adminSocketObjects[username] = client;
     socketObjects[username] = client;
     output(`New ws connection for ${username}: ${client.id}`);
 

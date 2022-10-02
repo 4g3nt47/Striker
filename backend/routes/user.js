@@ -5,14 +5,21 @@
 
 import {Router} from 'express';
 import {
-  createUser, loginUser, logoutUser, getUsers
+  createUser, deleteUser, loginUser, logoutUser, getUsers,
+  grantAdmin, revokeAdmin, suspendUser, activateUser
 } from '../controllers/user.js';
 
 const router = Router();
 
 router.get("/", getUsers);
 router.post("/register", createUser);
+router.delete("/:username", deleteUser);
 router.post("/login", loginUser);
 router.get("/logout", logoutUser);
+
+router.get("/admin/grant/:username", grantAdmin);
+router.get("/admin/revoke/:username", revokeAdmin);
+router.get("/suspend/:username", suspendUser);
+router.get("/activate/:username", activateUser);
 
 export default router;

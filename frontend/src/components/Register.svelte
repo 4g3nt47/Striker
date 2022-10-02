@@ -50,13 +50,13 @@
 
 <form class="signup-form mt-28" on:submit|preventDefault={register}>
   <label for="username">Username:</label>
-  <input type="text" id="username" bind:value={fields.username} autocomplete="off" required>
+  <input type="text" id="username" bind:value={fields.username} autocomplete="off" placeholder="Username..." required>
   <label for="password">Password:</label>
-  <input type="password" id="password" bind:value={fields.password} required>
+  <input type="password" id="password" bind:value={fields.password} placeholder="Password..." required>
   <label for="conf-password">Confirm password:</label>
-  <input type="password" id="conf-password" bind:value={fields.confPassword} required>
+  <input type="password" id="conf-password" bind:value={fields.confPassword} placeholder="Password..." required>
   <label for="reg-key">Registration key:</label>
-  <input type="password" id="reg-key" bind:value={fields.regKey} required>
+  <input type="password" id="reg-key" bind:value={fields.regKey} placeholder="Registration key..." required>
   <div class="flex flex-row space-x-2 mt-5">
     <Button bind:btn={registerBtn} btnType="submit">Register</Button>
     <Button type="secondary" on:click={() => dispatch("switchPage", "login")}>Login</Button>

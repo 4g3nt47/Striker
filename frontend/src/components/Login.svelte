@@ -47,9 +47,9 @@
 
 <form class="login-form mt-28" on:submit|preventDefault={login}>
   <label for="username">Username:</label>
-  <input type="text" id="username" bind:value={fields.username} autocomplete="off" required>
+  <input type="text" id="username" bind:value={fields.username} autocomplete="off" placeholder="Username..." required>
   <label for="password">Password:</label>
-  <input type="password" id="password" bind:value={fields.password} required>
+  <input type="password" id="password" bind:value={fields.password} placeholder="Password..." required>
   <div class="flex flex-row space-x-2 mt-5">
     <Button bind:btn={loginBtn} btnType="submit">Login</Button>
     <Button type="secondary" on:click={() => dispatch("switchPage", "register")}>Register</Button>

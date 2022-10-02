@@ -23,6 +23,11 @@ const userSchema = mongoose.Schema({
     required: true,
     default: false
   },
+  suspended: {
+    type: Boolean,
+    required: true,
+    default: false,
+  },
   token: {
     type: String
   },
@@ -81,18 +86,36 @@ export const createUser = async (username, password) => {
     throw new Error("Username must be alphanumeric!");
   if (await User.findOne({username}))
     throw new Error("User already exists!");
-  const user = new User({
+  const data = {
     username,
+    admin: false,
+    suspended: false,
     creationDate: Date.now(),
     lastSeen: Date.now()
-  });
+  }
+  const user = new User(data);
   await user.setPassword(password);
   await user.save();
+  global.adminWSEmit("new_user", data);
   return user;
 };
 
 /**
- * Login user.
+ * Delete a user account.
+ * @param {string} username - The target user's username.
+ * @return {object} The query result.
+ */
+export const deleteUser = async (username) => {
+
+  const data = await User.deleteOne({username: username.toString()});
+  if (data.deletedCount == 0)
+    throw new Error("Invalid user!");
+  global.adminWSEmit("user_deleted", username);
+  return data;
+};
+
+/**
+ * Login user. Will always fail for suspended users.
  * @param {string} username - The username submitted
  * @param {string} password - The password submitted
  * @return {object} The user's profile
@@ -101,11 +124,12 @@ export const loginUser = async (username, password) => {
 
   username = username.toString().trim();
   password = password.toString().trim();
-  const user = await User.findOne({username});
+  const user = await User.findOne({username, suspended: false});
   if (!(user && (await user.validatePassword(password) === true)))
     throw new Error("Authentication failed!");
   user.lastSeen = Date.now();
   await user.save();
+  global.adminWSEmit("user_updated", await getUser(user.username));
   return user;
 };
 
@@ -141,13 +165,13 @@ export const deleteToken = async (username) => {
 };
 
 /**
- * Load data of user with the given token.
+ * Load data of user with the given token. Won't work for suspended users.
  * @param {string} token - The token to lookup
  * @return {object} The user data.
  */
 export const getUserByToken = async (token) => {
   
-  const user = await User.findOne({token: token.toString()});
+  const user = await User.findOne({token: token.toString(), suspended: false});
   if (!user)
     throw new Error("Invalid token!");
   return user;
@@ -167,6 +191,25 @@ export const setupSession = async (session, user) => {
 };
 
 /**
+ * Get the data of a single user.
+ * @param {string} username - The user's username.
+ * @return {object} - The user data (with some fields removed).
+ */
+export const getUser = async (username) => {
+
+  const user = await User.findOne({username: username.toString()});
+  if (!user)
+    return null;
+  return {
+    username: user.username,
+    admin: user.admin,
+    suspended: user.suspended,
+    creationDate: user.creationDate,
+    lastSeen: user.lastSeen
+  };
+};
+
+/**
  * Get data of all users.
  * @return {object} Data of all users.
  */
@@ -178,9 +221,62 @@ export const getUsers = async () => {
     users.push({
       username: user.username,
       admin: user.admin,
+      suspended: user.suspended,
       creationDate: user.creationDate,
       lastSeen: user.lastSeen
     });
   }
   return users;
+};
+
+/**
+ * Grant admin privs to a user.
+ * @param {string} username - The target user's username.
+ * @return {object} The query result.
+ */
+export const grantAdmin = async (username) => {
+  
+  const data = await User.updateOne({username: username.toString(), admin: false}, {admin: true});
+  if (data.modifiedCount > 0)
+    global.adminWSEmit("user_updated", await getUser(username.toString()));
+  return data;
+};
+
+/**
+ * Revoke admin privs of a user.
+ * @param {string} username - The target user's username.
+ * @return {object} The query result.
+ */
+export const revokeAdmin = async (username) => {
+  
+  const data = await User.updateOne({username: username.toString(), admin: true}, {admin: false});
+  if (data.modifiedCount > 0)
+    global.adminWSEmit("user_updated", await getUser(username.toString()));
+  return data;
+};
+
+/**
+ * Suspend a user account.
+ * @param {string} username - The target user's username.
+ * @return {object} The query result.
+ */
+export const suspendUser = async (username) => {
+  
+  const data = await User.updateOne({username: username.toString(), suspended: false}, {suspended: true});
+  if (data.modifiedCount > 0)
+    global.adminWSEmit("user_updated", await getUser(username.toString()));
+  return data;
+};
+
+/**
+ * Activate a suspended user account.
+ * @param {string} username - The target user's username.
+ * @return {object} The query result.
+ */
+export const activateUser = async (username) => {
+  
+  const data = await User.updateOne({username: username.toString(), suspended: true}, {suspended: false});
+  if (data.modifiedCount > 0)
+    global.adminWSEmit("user_updated", await getUser(username.toString()));
+  return data;
 };

@@ -66,13 +66,13 @@ app.use(async (req, res, next) => {
 
   if (req.session.loggedIn){
     try{
-      const user = await User.findOne({username: req.session.username});
+      const user = await User.findOne({username: req.session.username, suspended: false});
       if (!user)
         throw new Error("Invalid user: " + req.session.username);
       setupSession(req.session, user);
     }catch(error){
       req.session.destroy();
-      return res.status(500).json({error: "Error loading session: " + error.message});
+      return res.status(500).json({error: "Your session has expired!"});
     }
   }
   next();

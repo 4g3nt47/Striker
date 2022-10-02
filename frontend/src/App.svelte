@@ -353,7 +353,7 @@
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
         {:else if (session.page === "users")}
-          <Users {session}/>
+          <Users {session} {socket}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

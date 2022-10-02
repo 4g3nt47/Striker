@@ -7,12 +7,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 import User, * as model from '../models/user.js';
 
-const REGISTRATION_KEY = global.REGISTRATION_KEY;
 const PERM_ERROR = {error: "Permission denied!"}
 
 export const createUser = (req, res) => {
   
-  if (req.body.regKey !== REGISTRATION_KEY)
+  if (req.body.regKey !== global.REGISTRATION_KEY)
     return res.status(403).json({error: "Invalid registration key!"});
   model.createUser(req.body.username, req.body.password).then(user => {
     return res.json({success: "User created!"});
@@ -20,6 +19,17 @@ export const createUser = (req, res) => {
     return res.status(403).json({error: error.message});
   });
 };
+
+export const deleteUser = (req, res) => {
+
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.deleteUser(req.params.username).then(() => {
+    return res.json({success: "User deleted!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+}
 
 export const loginUser = (req, res) => {
 
@@ -55,6 +65,50 @@ export const getUsers = (req, res) => {
     return res.status(403).json(PERM_ERROR);
   model.getUsers().then(users => {
     return res.json(users);
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+export const grantAdmin = (req, res) => {
+
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.grantAdmin(req.params.username).then(() => {
+    return res.json({success: "Admin privileges granted!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+export const revokeAdmin = (req, res) => {
+
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.revokeAdmin(req.params.username).then(() => {
+    return res.json({success: "Admin privileges revoked!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+export const suspendUser = (req, res) => {
+
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.suspendUser(req.params.username).then(() => {
+    return res.json({success: "Account suspended!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+export const activateUser = (req, res) => {
+  
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.activateUser(req.params.username).then(() => {
+    return res.json({success: "Account activated!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
   });
