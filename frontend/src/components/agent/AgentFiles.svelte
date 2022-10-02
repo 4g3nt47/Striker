@@ -74,9 +74,7 @@
     window.open(`${session.api}/agent/download/${file.uid}`);
   };
 
-  onMount(async () => {
-    loadFiles();
-  });
+  onMount(loadFiles);
 
 </script>
 

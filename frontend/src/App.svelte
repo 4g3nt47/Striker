@@ -14,6 +14,7 @@
   import ErrorMsg from './components/ErrorMsg.svelte';
   import AgentsList from './components/agent/AgentsList.svelte';
   import AgentHandler from './components/agent/AgentHandler.svelte';
+  import Users from './components/Users.svelte';
 
   // Create a new session tracker.
   const createSession = () => {
@@ -332,8 +333,6 @@
       <div class="page-nav bg-gray-900 border-gray-300 text-gray-300 col-span-1 pl-5 pt-10 shadow-md shadow-black">
         <ul class="main-nav">
           <li on:click={() => switchPage("agents")}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
-          <li on:click={() => switchPage("tasks")}><Fa icon={icons.faListCheck} class="inline-block w-10"/>Tasks</li>
-          <li on:click={() => switchPage("listeners")}><Fa icon={icons.faMicrophone} class="inline-block w-10"/>Listeners</li>
           <li on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
@@ -353,6 +352,8 @@
           <AgentsList {agents} {tasks} on:selectedAgent={useAgent}/>
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
+        {:else if (session.page === "users")}
+          <Users {session}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

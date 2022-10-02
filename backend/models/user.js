@@ -104,6 +104,8 @@ export const loginUser = async (username, password) => {
   const user = await User.findOne({username});
   if (!(user && (await user.validatePassword(password) === true)))
     throw new Error("Authentication failed!");
+  user.lastSeen = Date.now();
+  await user.save();
   return user;
 };
 
@@ -164,3 +166,21 @@ export const setupSession = async (session, user) => {
   session.loggedIn = true;
 };
 
+/**
+ * Get data of all users.
+ * @return {object} Data of all users.
+ */
+export const getUsers = async () => {
+
+  const data = await User.find({});
+  let users = [];
+  for (let user of data){
+    users.push({
+      username: user.username,
+      admin: user.admin,
+      creationDate: user.creationDate,
+      lastSeen: user.lastSeen
+    });
+  }
+  return users;
+};

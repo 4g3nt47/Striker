@@ -48,3 +48,14 @@ export const logoutUser = (req, res) => {
     return res.status(403).json(PERM_ERROR);
   }
 };
+
+export const getUsers = (req, res) => {
+
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.getUsers().then(users => {
+    return res.json(users);
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};

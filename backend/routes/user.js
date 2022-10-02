@@ -5,13 +5,14 @@
 
 import {Router} from 'express';
 import {
-  createUser, loginUser, logoutUser
+  createUser, loginUser, logoutUser, getUsers
 } from '../controllers/user.js';
 
 const router = Router();
 
+router.get("/", getUsers);
 router.post("/register", createUser);
 router.post("/login", loginUser);
-router.get("/logout", logoutUser)
+router.get("/logout", logoutUser);
 
 export default router;
