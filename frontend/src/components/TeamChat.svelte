@@ -59,5 +59,5 @@
 
 <div id="wrapper" class="h-full font-mono text-md">
   <textarea id="messages" class="no-scrollbar bg-gray-900 text-white" bind:value={chatMessages} readonly></textarea>
-  <input id="input" class="bg-gray-300" type="text" bind:value={input} on:keyup={inputKeyup} placeholder="Message...">
+  <input id="input" class="bg-gray-300" type="text" bind:value={input} autocomplete="off" on:keyup={inputKeyup} placeholder="Message...">
 </div>

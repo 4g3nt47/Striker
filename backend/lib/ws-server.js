@@ -192,7 +192,8 @@ export const setupWS = (httpServer) => {
 
     // For creating a new team chat message.
     client.on("send_teamchat_message", (message) => {
-      chatModel.createMessage(username, message);
+      chatModel.createMessage(username, message).catch(error => {
+      });
     });
 
   });

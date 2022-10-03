@@ -17,6 +17,7 @@ import User, {setupSession} from './models/user.js';
 import userRoute from './routes/user.js';
 import agentRoute from './routes/agent.js';
 import chatRoute from './routes/chat.js';
+import keyRouter from './routes/key.js';
 
 // Setup global configs.
 const DB_URL = process.env.DB_URL;
@@ -80,10 +81,10 @@ app.use(async (req, res, next) => {
 });
 
 // Mount routes
-
 app.use("/user", userRoute);
 app.use("/agent", agentRoute);
 app.use("/chat", chatRoute);
+app.use("/key", keyRouter);
 
 // 404
 app.all("*", (req, res) => {
@@ -106,5 +107,4 @@ mongoose.connect(DB_URL).then(() => {
   });
 
   setupWS(httpServer);
-
 });

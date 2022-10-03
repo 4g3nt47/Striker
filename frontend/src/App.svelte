@@ -16,6 +16,7 @@
   import AgentHandler from './components/agent/AgentHandler.svelte';
   import Users from './components/Users.svelte';
   import TeamChat from './components/TeamChat.svelte';
+  import AuthKeys from './components/AuthKeys.svelte';
 
   // Create a new session tracker.
   const createSession = () => {
@@ -363,6 +364,7 @@
         <ul class="main-nav">
           <li on:click={() => switchPage("agents")}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
           <li on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
+          <li on:click={() => switchPage("keys")}><Fa icon={icons.faKey} class="inline-block w-10"/>Auth Keys</li>
           <li on:click={() => switchPage("chat")}><Fa icon={icons.faMessage} class="inline-block w-10"/>Team Chat</li>
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
@@ -382,6 +384,8 @@
           <AgentsList {agents} {tasks} on:selectedAgent={useAgent}/>
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
+        {:else if (session.page === "keys")}
+          <AuthKeys {session} {socket}/>
         {:else if (session.page === "chat")}
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}
