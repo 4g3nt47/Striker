@@ -16,6 +16,7 @@ import {output} from './lib/utils.js';
 import User, {setupSession} from './models/user.js';
 import userRoute from './routes/user.js';
 import agentRoute from './routes/agent.js';
+import chatRoute from './routes/chat.js';
 
 // Setup global configs.
 const DB_URL = process.env.DB_URL;
@@ -82,6 +83,7 @@ app.use(async (req, res, next) => {
 
 app.use("/user", userRoute);
 app.use("/agent", agentRoute);
+app.use("/chat", chatRoute);
 
 // 404
 app.all("*", (req, res) => {

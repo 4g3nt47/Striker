@@ -280,3 +280,20 @@ export const activateUser = async (username) => {
     global.adminWSEmit("user_updated", await getUser(username.toString()));
   return data;
 };
+
+/**
+ * Reset the password of a user.
+ * @param {string} username - The target user's username.
+ * @param {string} password - The new password.
+ * @return {object} The query result.
+ */
+export const resetPassword = async (username, password) => {
+
+  username = username.toString();
+  password = password.toString();
+  const user = await User.findOne({username});
+  if (!user)
+    throw new Error("Invalid user!");
+  await user.setPassword(password);
+  return await user.save();
+};

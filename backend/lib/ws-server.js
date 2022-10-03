@@ -8,6 +8,7 @@ import User, * as userModel from '../models/user.js';
 import Agent, * as agentModel from '../models/agent.js';
 import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
+import Chat, * as chatModel from '../models/chat.js';
 import {output} from './utils.js';
 
 /**
@@ -187,6 +188,11 @@ export const setupWS = (httpServer) => {
       taskModel.deleteTask(data.agentID, data.taskID, username).catch(error => {
         client.emit("striker_error", error.message);
       });
+    });
+
+    // For creating a new team chat message.
+    client.on("send_teamchat_message", (message) => {
+      chatModel.createMessage(username, message);
     });
 
   });

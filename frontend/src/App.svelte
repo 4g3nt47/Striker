@@ -15,6 +15,7 @@
   import AgentsList from './components/agent/AgentsList.svelte';
   import AgentHandler from './components/agent/AgentHandler.svelte';
   import Users from './components/Users.svelte';
+  import TeamChat from './components/TeamChat.svelte';
 
   // Create a new session tracker.
   const createSession = () => {
@@ -98,6 +99,7 @@
     wsInit(session.token);
     loadAgents();
     loadTasks();
+    loadTeamchatMessages();
   };
 
 
@@ -182,9 +184,14 @@
       updateConsoleMessage(data.agentID, data.msg);
     });
 
+    // Called when a new team chat message was created.
+    socket.on('new_teamchat_message', (message) => {
+      teamchatMessages = [...teamchatMessages, message];
+    });
+
     // Handles custom errors.
     socket.on('striker_error', (err) => {
-      console.log("Error: " + err);
+      console.log("Striker Error: " + err);
     });
 
     // Handles server-side disconnection.
@@ -202,12 +209,12 @@
       });
       const data = await res.json();
       if (res.status !== 200)
-        alert("Error loading agents: " + data.error);
+        throw new Error(data.error);
       agents = data;
       for (let i = 0; i < agents.length; i++)
         consoleMsgs[agents[i].uid] = [];
     }catch(err){
-      alert(err.message);
+      alert("Error loading agents: " + err.message);
     }
   };
 
@@ -220,10 +227,26 @@
       });
       const data = await res.json();
       if (res.status !== 200)
-        alert("Error loading tasks: " + data.error);
+        throw new Error(data.error);
       tasks = data;
     }catch(err){
-      alert(err.message);
+      alert("Error loading tasks: " + err.message);
+    }
+  };
+
+  // Load all team chat messages from the server using the REST API.
+  const loadTeamchatMessages = async () => {
+
+    try{
+      const res = await fetch(`${session.api}/chat/messages`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      teamchatMessages = data;
+    }catch(err){
+      alert("Error loadng team chat: " + err.message);
     }
   };
 
@@ -297,11 +320,17 @@
     clearConsole(e.detail);
   };
 
+  // Handles the `sendMessage` event created by TeamChat.svelte
+  const sendTeamchatMessage = (e) => {
+    socket.emit("send_teamchat_message", e.detail);
+  };
+
   let agents = []; // All available agents.
   let tasks = {}; // All agent IDs mapped to an array of their tasks
   let selectedAgent = null; // The current agent being handled by the user
   let selectedAgentTasks = null; // Tasks of the current agent being handled
   let consoleMsgs = {}; // IDs of agents mapped to the list of texts to display in their console view.
+  let teamchatMessages = []; // Team server chat messeges.
 
   let socket = null;
   let session = loadSession();
@@ -334,6 +363,7 @@
         <ul class="main-nav">
           <li on:click={() => switchPage("agents")}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
           <li on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
+          <li on:click={() => switchPage("chat")}><Fa icon={icons.faMessage} class="inline-block w-10"/>Team Chat</li>
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
             <li on:click={() => switchPage("admin")}><Fa icon={icons.faCrown} class="inline-block w-10"/>Admin</li>
@@ -352,6 +382,8 @@
           <AgentsList {agents} {tasks} on:selectedAgent={useAgent}/>
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
+        {:else if (session.page === "chat")}
+          <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}
           <Users {session} {socket}/>
         {:else}

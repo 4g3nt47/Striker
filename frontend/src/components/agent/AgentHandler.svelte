@@ -65,8 +65,23 @@
 
     infoPageError = "";
     currTab = newTab;
-    if (currTab === "Console")
+    if (currTab === "Console"){
       consoleToBottom();
+      setTimeout(() => {
+        let input = document.getElementById('console-input');
+        if (input)
+          input.focus();
+        setConsoleSize();
+      }, 70);
+    }
+  };
+
+  const setConsoleSize = () => {
+
+    let output = document.getElementById('console-text');
+    let wrapper = document.getElementById('tabs-container');
+    if (output && wrapper)
+      output.rows = wrapper.offsetHeight / 36;
   };
 
   /**
@@ -116,9 +131,11 @@
     }
   };
 
+  window.onresize = setConsoleSize;
+
 </script>
 
-<div class="border-2 border-gray-900 min-h-full max-h-full no-scrollbar overflow-y-auto overflow-x-hidden">
+<div id="tabs-container" class="border-2 border-gray-900 min-h-full max-h-full no-scrollbar overflow-y-auto overflow-x-hidden">
 
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
@@ -177,7 +194,7 @@
       <TasksList {socket} {tasks}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
-      <input class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec}> 
+      <input id="console-input" class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec} autocomplete="off"> 
     {:else if (currTab === "Files")}
       <AgentFiles {session} {agent}/>
     {/if}

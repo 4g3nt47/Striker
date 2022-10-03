@@ -6,7 +6,7 @@
 import {Router} from 'express';
 import {
   createUser, deleteUser, loginUser, logoutUser, getUsers,
-  grantAdmin, revokeAdmin, suspendUser, activateUser
+  grantAdmin, revokeAdmin, suspendUser, activateUser, resetPassword
 } from '../controllers/user.js';
 
 const router = Router();
@@ -21,5 +21,6 @@ router.get("/admin/grant/:username", grantAdmin);
 router.get("/admin/revoke/:username", revokeAdmin);
 router.get("/suspend/:username", suspendUser);
 router.get("/activate/:username", activateUser);
+router.post("/password/:username", resetPassword);
 
 export default router;

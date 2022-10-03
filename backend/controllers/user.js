@@ -113,3 +113,14 @@ export const activateUser = (req, res) => {
     return res.status(403).json({error: error.message});
   });
 };
+
+export const resetPassword = (req, res) => {
+
+  if (req.session.admin !== true)
+    return res.status(403).json(PERM_ERROR);
+  model.resetPassword(req.params.username, req.body.password).then(() => {
+    return res.json({success: "Password changed!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};

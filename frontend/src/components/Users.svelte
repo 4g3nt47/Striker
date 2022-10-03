@@ -23,6 +23,7 @@
   let loading = true;
   let loadError = "";
   let modalSuccess = "", modalError = "";
+  let newPassword = "";
 
   // Fetch users from the backend.
   const loadUsers = async () => {
@@ -61,6 +62,7 @@
 
     showUserModal = false;
     selectedUser = null;
+    newPassword = "";
     clearMsgs();
   };
 
@@ -107,6 +109,32 @@
       const data = await res.json();
       if (res.status !== 200)
         throw new Error(data.error);      
+    }catch(err){
+      modalError = err.message;
+    }
+  };
+
+  const newPasswordKeyup = async (e) => {
+
+    if (!(e.key === 'Enter' || e.key === 13))
+      return;
+    if (!newPassword)
+      return;
+    clearMsgs();
+    try{
+      const res = await fetch(`${session.api}/user/password/${selectedUser.username}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({password: newPassword})
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      newPassword = "";
+      modalSuccess = data.success;
     }catch(err){
       modalError = err.message;
     }
@@ -162,6 +190,9 @@
               <td class="pl-2">{new Date(selectedUser.lastSeen).toLocaleString()}</td>
             </tr>
           </table>
+          <div class="mt-2 w-full">
+            <input class="col-span-2" type="password" bind:value={newPassword} placeholder="New password..." on:keyup={newPasswordKeyup}>
+          </div>
           <div class="mt-2 w-full grid grid-cols-3 gap-2">
             <Button type="custom" custom="text-white bg-gray-900 border-gray-900" on:click={toggleAdmin}>{selectedUser.admin ? "Revoke Admin" : "Grant Admin"}</Button>
             <Button type="custom" custom="text-white bg-gray-900 border-gray-900" on:click={toggleSuspend}>{selectedUser.suspended ? "Activate User" : "Suspend User"}</Button>
