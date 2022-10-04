@@ -48,10 +48,13 @@ export const loginUser = (req, res) => {
 
 export const logoutUser = (req, res) => {
   
-  const socketObjects = global.socketObjects;
   if (req.session.loggedIn){
-    socketObjects[req.session.username].disconnect(true); // Close the web socket connection for the user.
-    model.deleteToken(req.session.username);
+    const username = req.session.username;
+    global.socketObjects[username].disconnect(true); // Close the web socket connection for the 
+    delete global.socketObjects[username];
+    if (req.session.admin)
+      delete global.adminSocketObjects[username];
+    model.deleteToken(username);
     req.session.destroy();
     return res.json({success: "You have been logged out!"});
   }else{

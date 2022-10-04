@@ -38,8 +38,7 @@ export const setupWS = (httpServer) => {
    */
   global.adminWSEmit = async (name, data) => {
 
-    let usernames = Object.keys(adminSocketObjects);
-    for (let username of usernames)
+    for (let username in adminSocketObjects)
       adminSocketObjects[username].emit(name, data);
   };
 
@@ -74,6 +73,7 @@ export const setupWS = (httpServer) => {
                      "  -------                --------\n\n"+
                      "  abort                  Task agent to quit\n"+
                      "  clear                  Clear console output\n"+
+                     "  delay <secs>           Update agent callback delay\n"+
                      "  delete agent           Delete agent\n"+
                      "  delete task <id>       Delete a task\n"+
                      "  download <file>        Download a file from the agent\n"+
@@ -157,6 +157,25 @@ export const setupWS = (httpServer) => {
           }).catch(error => {
             client.emit("striker_error", error.message);
           });
+        }else if (input.startsWith("delay ")){
+          let delay = input.substr(6).trim();
+          if (isNaN(delay)){
+            client.emit("agent_console_output", {
+              agentID,
+              msg: serverPrompt + "Invalid callback delay: " + delay
+            });
+          }else{
+            delay = parseInt(delay);
+            taskModel.createTask(username, {
+              agentID, taskType: "delay", data: {delay}
+            }).then(() => {
+              agentModel.updateDelay(agentID, delay).catch(error => {
+                client.emit("striker_error", error.message);
+              });
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            })
+          }
         }else if (input === "abort"){
           taskModel.createTask(username, {
             agentID, taskType: "abort"
@@ -164,7 +183,7 @@ export const setupWS = (httpServer) => {
             client.emit("striker_error", error.message);
           });
         }else{ // Unknown query
-          socketServer.emit("agent_console_output", {
+          client.emit("agent_console_output", {
             agentID,
             msg: serverPrompt + "Unknown command: " + input
           });
@@ -173,21 +192,6 @@ export const setupWS = (httpServer) => {
         console.log(error);
         socketServer.emit("striker_error", error.message);
       }
-    });
-
-    // For creating an auth key.
-    client.on("create_authkey", (data) => {
-
-      keyModel.createKey(data.key, data.keyType, username).catch(error => {
-        client.emit("striker_error", error.message);
-      });
-    });
-
-    client.on("delete_authkey", (key) => {
-
-      keyModel.deleteKey(key).catch(error => {
-        client.emit("striker_error", error.message);
-      });
     });
 
     // For queuing a prepared task for an agent.

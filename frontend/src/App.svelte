@@ -1,5 +1,5 @@
 <script>
-  
+
   /**
    * @file The primary component.
    * @author Umar Abdul
@@ -46,7 +46,7 @@
 
   // Load session from local storage or create a new one.
   const loadSession = () => {
-    
+
     let newSession = createSession();
     if (!Storage)
       return newSession;
@@ -98,7 +98,6 @@
   const setupC2 = () => {
 
     wsInit(session.token);
-    loadAuthKeys();
     loadAgents();
     loadTasks();
     loadTeamchatMessages();
@@ -122,7 +121,7 @@
 
     // Called when a new agent is created.
     socket.on('new_agent', (agent) => {
-      
+
       agents = [agent, ...agents];
       tasks[agent.uid] = [];
       consoleMsgs[agent.uid] = [];
@@ -145,7 +144,7 @@
 
     // Called when a new task is created.
     socket.on('new_task', (task) => {
-      
+
       const agentID = task.agentID;
       if (!(agentID in tasks))
         tasks[agentID] = [];
@@ -169,7 +168,7 @@
           break;
         }
       }
-    });    
+    });
 
     // Called when a task gets deleted.
     socket.on('task_deleted', (data) => {
@@ -186,33 +185,6 @@
       updateConsoleMessage(data.agentID, data.msg);
     });
 
-    // Called when a new auth key was created.
-    socket.on('new_authkey', (newKey) => {
-      authKeys = [newKey, ...authKeys];
-    });
-    
-    // Called when an auth key was updated.
-    socket.on('authkey_updated', (newKey) => {
-    
-      if (selectedAuthKey.key == newKey.key)
-        selectedAuthKey = newKey;
-      for (let i = 0; i < authKeys.length; i++){
-        if (authKeys[i].key === newKey.key){
-          authKeys[i] = newKey;
-          break;
-        }
-      }
-      authKeys = authKeys;
-    });
-
-    // Called when an auth key is deleted.
-    socket.on('authkey_deleted', (key) => {
-
-      if (selectedAuthKey.key === key)
-        selectedAuthKey = null;
-      authKeys = authKeys.filter(k => k.key !== key);
-    });
-
     // Called when a new team chat message was created.
     socket.on('new_teamchat_message', (message) => {
       teamchatMessages = [...teamchatMessages, message];
@@ -227,29 +199,12 @@
     socket.on('disconnect', () => {
       console.log("Web socket disconnected!");
     });
-
-  };
-
-  // Load auth keys for agents.
-  const loadAuthKeys = async () => {
-    
-    try{
-      const res = await fetch(`${session.api}/key`, {
-        credentials: "include"
-      });
-      const data = await res.json();
-      if (res.status !== 200)
-        throw new Error(data.error);
-      authKeys = data;
-    }catch(err){
-      alert("Error loading auth keys: " + err.message);
-    }
   };
 
   // Load agents from the server using the REST API.
   const loadAgents = async () => {
 
-    try{    
+    try{
       const res = await fetch(`${session.api}/agent`, {
         credentials: "include"
       });
@@ -339,7 +294,7 @@
 
   // Update the console message of a agent.
   const updateConsoleMessage = (agentID, msg) => {
-    
+
     // Remove trailing newlines.
     msg = msg.replace(/\r\n+$/, "");
     msg = msg.replace(/\n+$/, "");
@@ -366,33 +321,11 @@
     clearConsole(e.detail);
   };
 
-  // Handles `createAuthKey` event created by AuthKeys.svelte
-  const createAuthKey = (e) => {
-    socket.emit("create_authkey", e.detail);
-  };
-
-  // Handles `deleteAuthKey` event created by AuthKeys.svelte
-  const deleteAuthKey = () => {
-    socket.emit("delete_authkey", selectedAuthKey.key);
-  };
-
-  // Handles `selectAuthKey` event created by AuthKeys.svelte
-  const selectAuthKey = (e) => {
-    selectedAuthKey = authKeys[e.detail];
-  };
-
-  // Handles `releaseAuthKey` event created by AuthKeys.svelte
-  const releaseAuthKey = () => {
-    selectedAuthKey = null;
-  };
-
   // Handles the `sendMessage` event created by TeamChat.svelte
   const sendTeamchatMessage = (e) => {
     socket.emit("send_teamchat_message", e.detail);
   };
 
-  let authKeys = []; // Agent authentication keys.
-  let selectedAuthKey = null; // The currently selected auth key.
   let agents = []; // All available agents.
   let tasks = {}; // All agent IDs mapped to an array of their tasks
   let selectedAgent = null; // The current agent being handled by the user
@@ -404,7 +337,7 @@
   let session = loadSession();
   if (session.loggedIn)
     setupC2(); // Reload C2 data since we already logged in.
-  
+
   if (["agentPage"].indexOf(session.page) !== -1){ // Pages we shouldn't resume a session in
     if (session.loggedIn)
       session.page = "agents";
@@ -445,14 +378,14 @@
 
       <!-- The current main page -->
       <div class="page-body col-span-5 no-scrollbar overflow-y-auto px-5 py-5 pt-10 bg-gray">
-        
+
         {#if (session.page === "agents")}
           <!-- List agents -->
           <AgentsList {agents} {tasks} on:selectedAgent={useAgent}/>
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
         {:else if (session.page === "keys")}
-          <AuthKeys {authKeys} {selectedAuthKey} on:createAuthKey={createAuthKey} on:deleteAuthKey={deleteAuthKey} on:selectAuthKey={selectAuthKey} on:releaseAuthKey={releaseAuthKey}/>
+          <AuthKeys {session} {socket}/>
         {:else if (session.page === "chat")}
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}
@@ -468,7 +401,7 @@
 </div>
 
 <style>
-  
+
   :root{
     --header-height: 4em;
   }

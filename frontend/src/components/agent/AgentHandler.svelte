@@ -140,7 +140,7 @@
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
     {#each tabs as tab, index}
-      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300 font-bold" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
+      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
     {/each}
   </ul>
 
@@ -150,40 +150,44 @@
     {#if (currTab === "Info")}
       <table class="w-full border-2 border-black text-left font-mono">
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">ID:</th>
-          <td>{agent.uid}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">ID</th>
+          <td class="pl-3">{agent.uid}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">OS:</th>
-          <td>{agent.os}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">OS</th>
+          <td class="pl-3">{agent.os}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">Host:</th>
-          <td>{agent.host}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Host</th>
+          <td class="pl-3">{agent.host}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">User:</th>
-          <td>{agent.user}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">User</th>
+          <td class="pl-3">{agent.user}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">Process ID:</th>
-          <td>{agent.pid}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Process ID</th>
+          <td class="pl-3">{agent.pid}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">Working directory:</th>
-          <td>{agent.cwd}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Working directory</th>
+          <td class="pl-3">{agent.cwd}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">Date Created:</th>
-          <td>{new Date(agent.dateCreated).toLocaleString()}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Date Created</th>
+          <td class="pl-3">{new Date(agent.dateCreated).toLocaleString()}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">Last Contact:</th>
-          <td>{new Date(agent.lastSeen).toLocaleString() + ` (${((Date.now() - agent.lastSeen) / (1000 * 60)).toFixed(2)} minutes)`}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Last Contact</th>
+          <td class="pl-3">{new Date(agent.lastSeen).toLocaleString() + ` (${((Date.now() - agent.lastSeen) / (1000 * 60)).toFixed(2)} minutes)`}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
-          <th class="text-right pr-5">Frozen:</th>
-          <td class={agent.frozen ? "text-cyan-700" : ""}>{agent.frozen}</td>
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Callback Delay</th>
+          <td class="pl-3">{agent.delay} seconds</td>
+        </tr>
+        <tr class="border-b-2 border-gray-900">
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Frozen</th>
+          <td class={"pl-3 " + (agent.frozen ? "text-cyan-700" : "")}>{agent.frozen ? "yes" : "no"}</td>
         </tr>        
       </table>
       <div class="w-1/5 my-2 mx-auto">

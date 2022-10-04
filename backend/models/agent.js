@@ -114,13 +114,29 @@ export const getAgent = async (agentID) => {
  */
 export const updateLastSeen = async (agentID) => {
   
-  const socketServer = global.socketServer;
   const agent = await Agent.findOne({uid: agentID.toString()});
   if (!agent)
     throw new Error("Invalid agent!");
   agent.lastSeen = Date.now();
   await agent.save();
-  socketServer.emit("update_agent", agent);
+  global.socketServer.emit("update_agent", agent);
+  return agent;
+};
+
+/**
+ * Update the callback delay of an agent. Emits the "update_agent" ws event on success.
+ * @param {string} agentID - ID of the agent.
+ * @param {number} delay - The new delay, in seconds.
+ * @return {object} The updated agent.
+ */
+export const updateDelay = async (agentID, delay) => {
+
+  const agent = await Agent.findOne({uid: agentID.toString()});
+  if (!agent)
+    throw new Error("Invalid agent!");
+  agent.delay = (delay > 0 ? delay : global.AGENT_DELAY);
+  await agent.save();
+  global.socketServer.emit("update_agent", agent);
   return agent;
 };
 
