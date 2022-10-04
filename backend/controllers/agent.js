@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import path from 'path';
 import multer from 'multer';
 import Agent, * as agentModel from '../models/agent.js';
+import Key, * as keyModel from '../models/key.js';
 import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
 
@@ -20,12 +21,18 @@ const orgFilenames = {}; // For temporarily mapping unique file IDs to their ori
  * Create a new agent. Called when a new agent calls home.
  * Sends an empty JSON to the client when it's unauthorized or a problem occurred.
  */
-export const agentInit = (req, res) => {
+export const agentInit = async (req, res) => {
   
+  const errRsp = {};
+  const authKey = req.body.key;
+  if (!authKey)
+    return res.json(errRsp);
+  if (!(await keyModel.authenticate(authKey)))
+    return res.json(errRsp);
   agentModel.createAgent(req.body).then(data => {
     return res.json(data.config);
   }).catch(error => {
-    return res.status(500).json({error: error.message});
+    return errRsp;
   });
 };
 

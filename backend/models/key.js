@@ -83,3 +83,30 @@ export const deleteKey = async (key) => {
 export const getKeys = async () => {
   return await Key.find({});
 };
+
+/**
+ * Authenticate the given key. If it's a one time key, it will be deleted.
+ * @param key - The key to authenticate.
+ * @return {boolean} true on success.
+ */
+export const authenticate = async (key) => {
+
+  key = key.toString();
+  const validKey = await Key.findOne({key});
+  if (!validKey)
+    return false;
+  if (validKey.keyType != 0){
+    deleteKey(key);
+  }else{
+    validKey.useCount++;
+    await validKey.save();
+    global.socketServer.emit("authkey_updated", {
+      key: validKey.key,
+      keyType: validKey.keyType,
+      owner: validKey.owner,
+      useCount: validKey.useCount,
+      creationDate: validKey.creationDate
+    });
+  }
+  return true;
+};

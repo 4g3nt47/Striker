@@ -98,6 +98,7 @@
   const setupC2 = () => {
 
     wsInit(session.token);
+    loadAuthKeys();
     loadAgents();
     loadTasks();
     loadTeamchatMessages();
@@ -185,6 +186,33 @@
       updateConsoleMessage(data.agentID, data.msg);
     });
 
+    // Called when a new auth key was created.
+    socket.on('new_authkey', (newKey) => {
+      authKeys = [newKey, ...authKeys];
+    });
+    
+    // Called when an auth key was updated.
+    socket.on('authkey_updated', (newKey) => {
+    
+      if (selectedAuthKey.key == newKey.key)
+        selectedAuthKey = newKey;
+      for (let i = 0; i < authKeys.length; i++){
+        if (authKeys[i].key === newKey.key){
+          authKeys[i] = newKey;
+          break;
+        }
+      }
+      authKeys = authKeys;
+    });
+
+    // Called when an auth key is deleted.
+    socket.on('authkey_deleted', (key) => {
+
+      if (selectedAuthKey.key === key)
+        selectedAuthKey = null;
+      authKeys = authKeys.filter(k => k.key !== key);
+    });
+
     // Called when a new team chat message was created.
     socket.on('new_teamchat_message', (message) => {
       teamchatMessages = [...teamchatMessages, message];
@@ -199,6 +227,23 @@
     socket.on('disconnect', () => {
       console.log("Web socket disconnected!");
     });
+
+  };
+
+  // Load auth keys for agents.
+  const loadAuthKeys = async () => {
+    
+    try{
+      const res = await fetch(`${session.api}/key`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      authKeys = data;
+    }catch(err){
+      alert("Error loading auth keys: " + err.message);
+    }
   };
 
   // Load agents from the server using the REST API.
@@ -321,11 +366,33 @@
     clearConsole(e.detail);
   };
 
+  // Handles `createAuthKey` event created by AuthKeys.svelte
+  const createAuthKey = (e) => {
+    socket.emit("create_authkey", e.detail);
+  };
+
+  // Handles `deleteAuthKey` event created by AuthKeys.svelte
+  const deleteAuthKey = () => {
+    socket.emit("delete_authkey", selectedAuthKey.key);
+  };
+
+  // Handles `selectAuthKey` event created by AuthKeys.svelte
+  const selectAuthKey = (e) => {
+    selectedAuthKey = authKeys[e.detail];
+  };
+
+  // Handles `releaseAuthKey` event created by AuthKeys.svelte
+  const releaseAuthKey = () => {
+    selectedAuthKey = null;
+  };
+
   // Handles the `sendMessage` event created by TeamChat.svelte
   const sendTeamchatMessage = (e) => {
     socket.emit("send_teamchat_message", e.detail);
   };
 
+  let authKeys = []; // Agent authentication keys.
+  let selectedAuthKey = null; // The currently selected auth key.
   let agents = []; // All available agents.
   let tasks = {}; // All agent IDs mapped to an array of their tasks
   let selectedAgent = null; // The current agent being handled by the user
@@ -385,7 +452,7 @@
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
         {:else if (session.page === "keys")}
-          <AuthKeys {session} {socket}/>
+          <AuthKeys {authKeys} {selectedAuthKey} on:createAuthKey={createAuthKey} on:deleteAuthKey={deleteAuthKey} on:selectAuthKey={selectAuthKey} on:releaseAuthKey={releaseAuthKey}/>
         {:else if (session.page === "chat")}
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}

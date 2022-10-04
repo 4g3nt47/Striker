@@ -140,7 +140,7 @@
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
     {#each tabs as tab, index}
-      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-green-300 bg-gray-300 text-gray-900" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
+      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300 font-bold" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
     {/each}
   </ul>
 

@@ -37,7 +37,6 @@
       if (res.status !== 200)
         throw new Error(data.error);
       users = data;
-      console.log(users);
     }catch(err){
       loadError = err.message;
     }

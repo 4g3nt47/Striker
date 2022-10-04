@@ -69,7 +69,7 @@ export const createAgent = async (data) => {
   const uid = crypto.randomBytes(8).toString('hex');
   const agent = new Agent({
     uid,
-    delay: global.AGENT_DELAY,
+    delay: parseInt(data.delay !== undefined ? data.delay : global.AGENT_DELAY),
     os: (data.os ? data.os.toString() : "unknown"),
     host: (data.host ? data.host.toString() : "unknown"),
     user: (data.user ? data.user.toString() : "unknown"),
@@ -81,8 +81,7 @@ export const createAgent = async (data) => {
   await agent.save();
   socketServer.emit("new_agent", agent);
   const config = {
-    uid: agent.uid,
-    delay: agent.delay,
+    uid: agent.uid
   };
   return {config, agent};
 };

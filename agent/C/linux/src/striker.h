@@ -29,6 +29,7 @@
 // A struct for tracking session info.
 typedef struct{
   char *uid; // The ID of the agent.
+  char *auth_key; // The key to use for authentication to the server.
   unsigned long delay; // Callback delay, in seconds.
   char *write_dir; // Full path to a writable directory.
   unsigned short abort; // Will be set to 1 if session need to be ended.
