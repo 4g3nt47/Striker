@@ -29,6 +29,9 @@
   export let consoleMsgs = [];
   
   const dispatch = createEventDispatcher();
+  let showTaskModal = false; // Show modal of selected task.
+  let selectedTask = null; // The selected task in tasks list.
+  let selectedTaskData = ""; // The data/args of a selected task.
   let tabs = ["Info", "Tasks", "Console", "Files"];
   let currTab = tabs[0];
   let consoleCommand = "";
@@ -36,6 +39,29 @@
   let msgCount = 0;
   let deleteAgentBtn = null;
   let infoPageError = "";
+
+  // Handles the `selectTask` event created by TasksList.svelte
+  const selectTask = (e) => {
+
+    selectedTask = e.detail;
+    selectedTaskData = "";
+    if (!selectedTask.data){
+      selectedTaskData = "null";
+    }else{
+      for (let k of Object.keys(selectedTask.data))
+        selectedTaskData += `${k} => ${selectedTask.data[k]}\n`;
+    }
+    selectedTaskData = selectedTaskData.trim();
+    showTaskModal = true;
+  };
+
+  // Handles the `releaseTask` event created by TasksList.svelte
+  const releaseTask = () => {
+    
+    showTaskModal = false;
+    selectedTask = null;
+    selectedTaskData = "";
+  };
 
   // Updates our console text. Called whenever `consoleMsgs` changes. 
   const updateConsole = (consoleMsgs) => {
@@ -57,8 +83,32 @@
     }, 70);
   };
 
-  // A reactive expression to update render new console messages.
+  // Called when tasks have been updated.
+  const updateTasks = (tasks) => {
+
+    if (selectedTask){
+      let valid = false;
+      for (let i = 0; i < tasks.length; i++){
+        const task = tasks[i];
+        if (task.uid === selectedTask.uid){
+          valid = true;
+          selectedTask = task;
+          selectedTaskData = "";
+          for (let k of Object.keys(selectedTask.data))
+            selectedTaskData += `${k} => ${selectedTask.data[k]}\n`;
+          break;
+        }
+      }
+      if (!valid) // Task no longer exist.
+        releaseTask();
+    }
+  };
+
+  // A reactive expression to render new console messages.
   $: updateConsole(consoleMsgs);
+
+  // A reactive expression to for tasks update.
+  $: updateTasks(tasks);
 
   // Handles tab switch.
   const switchTab = (newTab) => {
@@ -81,7 +131,7 @@
     let output = document.getElementById('console-text');
     let wrapper = document.getElementById('tabs-container');
     if (output && wrapper)
-      output.rows = wrapper.offsetHeight / 36;
+      output.rows = wrapper.offsetHeight / 35;
   };
 
   /**
@@ -195,7 +245,7 @@
       </div>
       <ErrorMsg error={infoPageError}/>
     {:else if (currTab === "Tasks")}
-      <TasksList {socket} {tasks}/>
+      <TasksList {socket} {tasks} {selectedTask} {showTaskModal} {selectedTaskData} on:selectTask={selectTask} on:releaseTask={releaseTask}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
       <input id="console-input" class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec} autocomplete="off"> 

@@ -8,6 +8,7 @@
    *          tasks - The tasks to list.
    */
 
+  import {createEventDispatcher} from 'svelte';
   import {slide} from 'svelte/transition';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
@@ -17,32 +18,20 @@
 
   export let socket = null;
   export let tasks = [];
+  export let showTaskModal = false;
+  export let selectedTask = null;
+  export let selectedTaskData = "";
 
-  let showTaskModal = false;
-  let selectedTask = null;
-  let selectedTaskData = "";
+  const dispatch = createEventDispatcher();
 
   // Select a task. Called after a listed task is clicked.
   const selectTask = (task) => {
-    
-    selectedTask = task;
-    selectedTaskData = "";
-    const keys = selectedTask
-    if (!selectedTask.data){
-      selectedTaskData = "null";
-    }else{
-      for (let k of Object.keys(selectedTask.data))
-        selectedTaskData += `${k} => ${selectedTask.data[k]}\n`;      
-    }
-    selectedTaskData = selectedTaskData.trim();
-    showTaskModal = true;
+    dispatch("selectTask", task);
   };
 
   // Release the selected task. Called when the displayed modal is closed.
   const releaseTask = () => {
-    
-    selectedTask = null;
-    showTaskModal = false;
+    dispatch("releaseTask");    
   };
 
   // Called when the delete task button of selected task is clicked.
@@ -54,7 +43,6 @@
       agentID: selectedTask.agentID,
       taskID: selectedTask.uid
     });
-    releaseTask();
   };
 
 </script>

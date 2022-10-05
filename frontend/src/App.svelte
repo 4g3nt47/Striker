@@ -101,6 +101,9 @@
     loadAgents();
     loadTasks();
     loadTeamchatMessages();
+    loadAuthKeys();
+    if (session.admin)
+      loadUsers();
   };
 
 
@@ -190,6 +193,58 @@
       teamchatMessages = [...teamchatMessages, message];
     });
 
+    // Called when new user is created.
+    socket.on("new_user", (user) => {
+      users = [...users, user];
+    });
+
+    // Called when a user gets deleted.
+    socket.on("user_deleted", (username) => {
+
+      if (selectedUser && selectedUser.username === username)
+        releaseUser();
+      users = users.filter(user => user.username !== username);
+    });
+
+    // Called when a user is updated.
+    socket.on("user_updated", (user) => {
+      
+      if (selectedUser && selectedUser.username === user.username)
+        selectedUser = user;
+      for (let i = 0; i < users.length; i++){
+        if (users[i].username === user.username){
+          users[i] = user;
+          break;
+        }
+      }
+    });
+
+    // Called when a new auth key was added.
+    socket.on("new_authkey", (newKey) => {
+      authKeys = [newKey, ...authKeys];
+    });
+
+    // Called when an auth key was deleted.
+    socket.on("authkey_deleted", (key) => {
+
+      if (selectedAuthKey && selectedAuthKey.key === key)
+        releaseAuthKey();
+      authKeys = authKeys.filter(k => k.key !== key);
+    });
+
+    // Called when an auth key was updated.
+    socket.on("authkey_updated", (key) => {
+
+      if (selectedAuthKey && selectedAuthKey.key === key.key)
+        selectedAuthKey = key;
+      for (let i = 0; i < authKeys.length; i++){
+        if (authKeys[i].key ===  key.key){
+          authKeys[i] = key;
+          break;
+        }
+      }
+    });
+
     // Handles custom errors.
     socket.on('striker_error', (err) => {
       console.log("Striker Error: " + err);
@@ -248,6 +303,38 @@
       teamchatMessages = data;
     }catch(err){
       alert("Error loadng team chat: " + err.message);
+    }
+  };
+
+  // Load all users (for admins only)
+  const loadUsers = async () => {
+
+    try{
+      let res = await fetch(`${session.api}/user`, {
+        credentials: "include"
+      });
+      let data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      users = data;
+    }catch(err){
+      alert("Error loading users: " + err.message);
+    }
+  };
+
+  // Load all agent auth keys.
+  const loadAuthKeys = async () => {
+
+    try{
+      const res = await fetch(`${session.api}/key`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      authKeys = data;
+    }catch(err){
+      loadError = "Error loading keys: " + err.message;
     }
   };
 
@@ -326,12 +413,42 @@
     socket.emit("send_teamchat_message", e.detail);
   };
 
+  // Handles the `selectUser` event created by Users.svelte
+  const selectUser = (e) => {
+    selectedUser = users[e.detail];
+    showUserModal = true;
+  };
+
+  // Handles the `releaseUser` event created by Users.svelte
+  const releaseUser = () => {
+    showUserModal = false;
+    selectedUser = null;
+  };
+
+  // Handles the `selectAuthKey` event created by AuthKeys.svelte
+  const selectAuthKey = (e) => {
+    selectedAuthKey = authKeys[e.detail];
+    showSelectedKeyModal = true;
+  };
+
+  // Handles the `releaseAuthKey` event created by AuthKeys.svelte
+  const releaseAuthKey = () => {
+    showSelectedKeyModal = false;
+    selectedAuthKey = null;
+  };
+
   let agents = []; // All available agents.
-  let tasks = {}; // All agent IDs mapped to an array of their tasks
   let selectedAgent = null; // The current agent being handled by the user
+  let tasks = {}; // All agent IDs mapped to an array of their tasks.
   let selectedAgentTasks = null; // Tasks of the current agent being handled
   let consoleMsgs = {}; // IDs of agents mapped to the list of texts to display in their console view.
   let teamchatMessages = []; // Team server chat messeges.
+  let users = []; // All available users, for admins only.
+  let selectedUser = null; // The currently selected user.
+  let showUserModal = false; // Controls the user management modal of Users.svelte
+  let authKeys = []; // Authentication keys for agents.
+  let selectedAuthKey = null; // The selected auth key.
+  let showSelectedKeyModal = false;
 
   let socket = null;
   let session = loadSession();
@@ -385,11 +502,11 @@
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
         {:else if (session.page === "keys")}
-          <AuthKeys {session} {socket}/>
+          <AuthKeys {session} {socket} {authKeys} {selectedAuthKey} {showSelectedKeyModal} on:selectAuthKey={selectAuthKey} on:releaseAuthKey={releaseAuthKey}/>
         {:else if (session.page === "chat")}
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}
-          <Users {session} {socket}/>
+          <Users {session} {socket} {users} {selectedUser} {showUserModal} on:selectUser={selectUser} on:releaseUser={releaseUser}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

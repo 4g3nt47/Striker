@@ -1,6 +1,6 @@
 <script>
 
-  import {onMount} from 'svelte';
+  import {createEventDispatcher} from 'svelte';
   import {slide} from 'svelte/transition';
   import Button from './Button.svelte';
   import Modal from './Modal.svelte';
@@ -11,33 +11,16 @@
 
   export let session = {};
   export let socket = null;
+  export let authKeys = [];
+  export let selectedAuthKey = null;
+  export let showSelectedKeyModal = false;
 
-  let authKeys = [];
-  let loading = true;
-  let loadError = "";
+  const dispatch = createEventDispatcher();
   let showAddKeyModal = false;
   let inputKey = "";
   let inputKeyType = "0";
   let addKeyError = "";
-  let selectedKey = null;
-  let showSelectedKeyModal = false;
   let selectedKeyModalError = "";
-
-  const loadKeys = async () => {
-
-    try{
-      const res = await fetch(`${session.api}/key`, {
-        credentials: "include"
-      });
-      const data = await res.json();
-      if (res.status !== 200)
-        throw new Error(data.error);
-      authKeys = data;
-    }catch(err){
-      loadError = "Error loading keys: " + err.message;
-    }
-    loading = false;
-  };
 
   const addKeyInit = () => {
 
@@ -71,26 +54,13 @@
     }
   };
 
-  const selectKey = (index) => {
-
-    selectedKeyModalError = "";
-    selectedKey = authKeys[index];
-    showSelectedKeyModal = true;
-  };
-
-  const releaseKey = () => {
-
-    selectedKey = null;
-    showSelectedKeyModal = false;
-  };
-
   const deleteKey = async () => {
 
     if (!confirm("Are you sure?"))
       return;
     selectedKeyModalError = "";
     try{
-      const res = await fetch(`${session.api}/key/${selectedKey.key}`, {
+      const res = await fetch(`${session.api}/key/${selectedAuthKey.key}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -102,30 +72,14 @@
     }
   };
 
-  socket.on("new_authkey", (newKey) => {
-    authKeys = [newKey, ...authKeys];
-  });
+  const selectAuthKey = (index) => {
+    dispatch("selectAuthKey", index);
+  };
 
-  socket.on("authkey_deleted", (key) => {
-
-    if (selectedKey && selectedKey.key === key)
-      releaseKey();
-    authKeys = authKeys.filter(k => k.key !== key);
-  });
-
-  socket.on("authkey_updated", (key) => {
-
-    if (selectedKey && selectedKey.key === key.key)
-      selectedKey = key;
-    for (let i = 0; i < authKeys.length; i++){
-      if (authKeys[i].key ===  key.key){
-        authKeys[i] = key;
-        break;
-      }
-    }
-  });
-
-  onMount(loadKeys);
+  const releaseAuthKey = () => {
+    selectedKeyModalError = "";
+    dispatch("releaseAuthKey");
+  };
 
 </script>
 
@@ -150,29 +104,29 @@
 </Modal>
 
 <!-- Selected key modal -->
-<Modal width="w-1/2" show={showSelectedKeyModal} on:modalClosed={releaseKey}>
-  {#if (selectedKey)}
+<Modal width="w-1/2" show={showSelectedKeyModal} on:modalClosed={releaseAuthKey}>
+  {#if (selectedAuthKey)}
     <div class="font-mono text-md">
       <table class="w-full">
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Key</th>
-          <td class="pl-2">{selectedKey.key} <span on:click={() => navigator.clipboard.writeText(selectedKey.key)}><Fa icon={icons.faClipboard} class="inline text-gray-900 mt-2 hover:text-green-600"/></span></td>
+          <td class="pl-2">{selectedAuthKey.key} <span on:click={() => navigator.clipboard.writeText(selectedAuthKey.key)}><Fa icon={icons.faClipboard} class="inline text-gray-900 mt-2 hover:text-green-600"/></span></td>
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Key Type</th>
-          <td class="pl-2">{selectedKey.keyType === 0 ? "Static" : "One time"}</td>
+          <td class="pl-2">{selectedAuthKey.keyType === 0 ? "Static" : "One time"}</td>
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Creator</th>
-          <td class="pl-2">{selectedKey.owner}</td>
+          <td class="pl-2">{selectedAuthKey.owner}</td>
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Usage Count</th>
-          <td class="pl-2">{selectedKey.useCount}</td>
+          <td class="pl-2">{selectedAuthKey.useCount}</td>
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Created</th>
-          <td class="pl-2">{new Date(selectedKey.creationDate).toLocaleString()}</td>
+          <td class="pl-2">{new Date(selectedAuthKey.creationDate).toLocaleString()}</td>
         </tr>
       </table>
       <div class="w-1/2 mt-5 mx-auto">
@@ -184,35 +138,27 @@
 </Modal>
 
 <div>
-  {#if (loading)}
-    <p>Loading keys, please wait...</p>
+  <Button type="secondary" on:click={addKeyInit}>Add Key</Button>
+  {#if (authKeys.length === 0)}
+    <ErrorMsg error="No keys available!"/>
   {:else}
-    <Button type="secondary" on:click={addKeyInit}>Add Key</Button>
-    {#if (loadError)}
-      <ErrorMsg error={loadError}/>
-    {:else}
-      {#if (authKeys.length === 0)}
-        <ErrorMsg error="No keys available!"/>
-      {:else}
-        <div class="mt-5">
-          <table class="border-2 border-gray-900 w-full font-mono text-left text-lg">
-            <tr class="bg-gray-900 text-white">
-              <th><Fa icon={icons.faFingerprint} class="inline-block w-10 text-purple-400"/>Key Type</th>
-              <th><Fa icon={icons.faKey} class="inline-block w-10 text-green-400"/>Key</th>
-              <th><Fa icon={icons.faClock} class="inline-block w-10 text-gray-400"/>Use Count</th>
-              <th><Fa icon={icons.faCalendar} class="inline-block w-10 text-blue-400"/>Date</th>
-            </tr>
-            {#each authKeys as key, index}
-              <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" on:click={() => selectKey(index)}>
-                <td class="pl-2">{key.keyType === 0 ? "static" : "one time"}</td>
-                <td class="pl-2">{key.key}</td>
-                <td class="pl-3">{key.useCount}</td>
-                <td class="pl-2">{new Date(key.creationDate).toLocaleString()}</td>
-              </tr>
-            {/each}
-          </table>
-        </div>
-      {/if}
-    {/if}
+    <div class="mt-5">
+      <table class="border-2 border-gray-900 w-full font-mono text-left text-lg">
+        <tr class="bg-gray-900 text-white">
+          <th><Fa icon={icons.faFingerprint} class="inline-block w-10 text-purple-400"/>Key Type</th>
+          <th><Fa icon={icons.faKey} class="inline-block w-10 text-green-400"/>Key</th>
+          <th><Fa icon={icons.faClock} class="inline-block w-10 text-gray-400"/>Use Count</th>
+          <th><Fa icon={icons.faCalendar} class="inline-block w-10 text-blue-400"/>Date</th>
+        </tr>
+        {#each authKeys as key, index}
+          <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" on:click={() => selectAuthKey(index)}>
+            <td class="pl-2">{key.keyType === 0 ? "static" : "one time"}</td>
+            <td class="pl-2">{key.key}</td>
+            <td class="pl-3">{key.useCount}</td>
+            <td class="pl-2">{new Date(key.creationDate).toLocaleString()}</td>
+          </tr>
+        {/each}
+      </table>
+    </div>
   {/if}
 </div>
