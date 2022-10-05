@@ -51,8 +51,9 @@ size_t buffer_strcpy(buffer *dest, const char *src){
 char *buffer_to_string(buffer *buff){
 
   char *str = malloc(sizeof(char) * (buff->used + 1));
-  if (buff->used == 0)
+  if (str == NULL)
     return NULL;
+  memset(str, 0, buff->used + 1);
   strncpy(str, buff->buffer, buff->used);
   str[buff->used] = '\0';
   return str;
