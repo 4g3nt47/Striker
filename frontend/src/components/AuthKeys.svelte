@@ -10,7 +10,6 @@
   import * as icons from '@fortawesome/free-solid-svg-icons';
 
   export let session = {};
-  export let socket = null;
   export let authKeys = [];
   export let selectedAuthKey = null;
   export let showSelectedKeyModal = false;

@@ -16,8 +16,13 @@
     msgCount = messages.length;
     chatMessages = "";
     for (let i = 0; i < msgCount; i++){
-      let date = new Date(messages[i].date);
-      chatMessages += `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')} - ${date.toLocaleTimeString()} ${messages[i].username.padStart(10, " ")}:  ${messages[i].message + (i == (msgCount - 1) ? "" : "\n")}`;
+      let message = messages[i];
+      if (typeof(message) === 'string'){
+        chatMessages += message + (i == (msgCount - 1) ? "" : "\n");
+      }else{
+        let date = new Date(messages[i].date);
+        chatMessages += `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')} - ${date.toLocaleTimeString()} ${messages[i].username.padStart(10, " ")}:  ${messages[i].message + (i == (msgCount - 1) ? "" : "\n")}`;
+      }
     }
     scrollToBottom();
   };

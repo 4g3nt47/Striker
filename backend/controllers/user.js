@@ -50,10 +50,7 @@ export const logoutUser = (req, res) => {
   
   if (req.session.loggedIn){
     const username = req.session.username;
-    global.socketObjects[username].disconnect(true); // Close the web socket connection for the 
-    delete global.socketObjects[username];
-    if (req.session.admin)
-      delete global.adminSocketObjects[username];
+    global.socketObjects[username].disconnect(true); // Close the web socket connection. Will trigger the 'disconnect' handler in ws-server.js
     model.deleteToken(username);
     req.session.destroy();
     return res.json({success: "You have been logged out!"});

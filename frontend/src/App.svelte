@@ -502,7 +502,7 @@
         {:else if (session.page === "agentPage" && selectedAgent !== null)}
           <AgentHandler {session} {socket} agent={selectedAgent} tasks={selectedAgentTasks} consoleMsgs={consoleMsgs[selectedAgent.uid]} on:clearConsole={clearConsoleHandler}/>
         {:else if (session.page === "keys")}
-          <AuthKeys {session} {socket} {authKeys} {selectedAuthKey} {showSelectedKeyModal} on:selectAuthKey={selectAuthKey} on:releaseAuthKey={releaseAuthKey}/>
+          <AuthKeys {session} {authKeys} {selectedAuthKey} {showSelectedKeyModal} on:selectAuthKey={selectAuthKey} on:releaseAuthKey={releaseAuthKey}/>
         {:else if (session.page === "chat")}
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}

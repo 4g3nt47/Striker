@@ -66,7 +66,7 @@ export const setupWS = (httpServer) => {
     if (user.admin)
       adminSocketObjects[username] = client;
     socketObjects[username] = client;
-    output(`New ws connection for ${username}: ${client.id}`);
+    output(`WS: New connection for '${username}': ${client.id}`);
 
     // Console help page.
     const helpPage = "  COMMAND                FUNCTION\n"+
@@ -211,8 +211,29 @@ export const setupWS = (httpServer) => {
 
     // For creating a new team chat message.
     client.on("send_teamchat_message", (message) => {
-      chatModel.createMessage(username, message).catch(error => {
-      });
+
+      if (!message)
+        return;
+      message = message.toString().trim();
+      if (message === "/users"){
+        let users = Object.keys(socketObjects).sort();
+        let output = "";
+        for (let user of users)
+          output += `=>  ${user}\n`;
+        client.emit("new_teamchat_message", output.trim());
+      }else{
+        chatModel.createMessage(username, message).catch(error => {
+        });
+      }
+    });
+
+    // Handles client ws disconnect
+    client.on("disconnect", () => {
+
+      delete global.socketObjects[username];
+      if (global.adminSocketObjects[username])
+        delete global.adminSocketObjects[username];
+      output(`WS: User '${username}' has disconnect!`);
     });
 
   });
