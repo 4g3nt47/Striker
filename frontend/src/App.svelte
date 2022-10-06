@@ -506,7 +506,7 @@
         {:else if (session.page === "chat")}
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}
-          <Users {session} {socket} {users} {selectedUser} {showUserModal} on:selectUser={selectUser} on:releaseUser={releaseUser}/>
+          <Users {session} {users} {selectedUser} {showUserModal} on:selectUser={selectUser} on:releaseUser={releaseUser}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

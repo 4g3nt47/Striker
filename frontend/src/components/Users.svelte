@@ -15,7 +15,6 @@
   import * as icons from '@fortawesome/free-solid-svg-icons';
 
   export let session = {};
-  export let socket = null;
   export let users = [];
   export let selectedUser = null;
   export let showUserModal = false;

@@ -73,6 +73,7 @@ export const setupWS = (httpServer) => {
                      "  -------                --------\n\n"+
                      "  abort                  Task agent to quit\n"+
                      "  clear                  Clear console output\n"+
+                     "  cd <dir>               Change working directory\n"+
                      "  delay <secs>           Update agent callback delay\n"+
                      "  delete agent           Delete agent\n"+
                      "  delete task <id>       Delete a task\n"+
@@ -174,8 +175,15 @@ export const setupWS = (httpServer) => {
               });
             }).catch(error => {
               client.emit("striker_error", error.message);
-            })
+            });
           }
+        }else if (input.startsWith("cd ")){
+          let dirname = input.substr(3).trim();
+          taskModel.createTask(username, {
+            agentID, taskType: "cd", data: {dir: dirname}
+          }).catch(error => {
+            client.emit("striker_error", error.message);
+          });
         }else if (input === "abort"){
           taskModel.createTask(username, {
             agentID, taskType: "abort"

@@ -72,7 +72,7 @@
         {#if (selectedTask.completed)}
           <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Completed</th>
-            <td class="pl-2">{new Date(selectedTask.dateCompleted).toLocaleString()}</td>
+            <td class="pl-2">{`${new Date(selectedTask.dateCompleted).toLocaleString()} (${((selectedTask.dateCompleted - selectedTask.dateReceived) / 1000).toFixed(2)} seconds)`}</td>
           </tr>
         {/if}
       </table>

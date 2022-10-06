@@ -39,6 +39,7 @@
   let msgCount = 0;
   let deleteAgentBtn = null;
   let infoPageError = "";
+  let cmdHistory = {cmds: [], index: 0};
 
   // Handles the `selectTask` event created by TasksList.svelte
   const selectTask = (e) => {
@@ -140,10 +141,37 @@
    */
   const consoleExec = (e) => {
 
+    // Use arrow keys to allow going to previous commands.
+    if (e.key === 'ArrowUp' || e.keyCode === 38){
+      if (cmdHistory.length === 0)
+        return;
+      let cmd = cmdHistory.cmds[cmdHistory.index];
+      if (cmd === undefined)
+        return;
+      consoleCommand = cmd;
+      if (cmdHistory.index > 0)
+        cmdHistory.index--;
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.keyCode === 40){
+      if (cmdHistory.length === 0)
+        return;
+      let cmd = cmdHistory.cmds[cmdHistory.index + 1];
+      if (cmd === undefined)
+        return;
+      consoleCommand = cmd;
+      cmdHistory.index += 1;
+      return;
+    }
     if (!(e.key === 'Enter' || e.keyCode === 13)) // User hit the enter key?
       return;
     if (consoleCommand.trim().length === 0)
       return;
+    // Add command to history if it's not the last one in the queue.
+    if (cmdHistory.cmds && cmdHistory.cmds[cmdHistory.cmds.length - 1] !== consoleCommand){    
+      cmdHistory.cmds.push(consoleCommand);
+      cmdHistory.index = cmdHistory.cmds.length - 1;
+    }
     if (consoleCommand === "clear"){
       dispatch("clearConsole", agent.uid);
     }else{

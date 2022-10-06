@@ -93,8 +93,8 @@
       </div>
       <label for="key-type">Key Type:</label>
       <select id="key-type" class="mb-5 inline-block w-56" bind:value={inputKeyType}>
-        <option value=0>Static</option>
-        <option value=1>One time</option>
+        <option value=0>one time</option>
+        <option value=1>static</option>
       </select>
       <Button btnType="submit">Add Key</Button>
       <ErrorMsg error={addKeyError}/>
@@ -113,7 +113,7 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Key Type</th>
-          <td class="pl-2">{selectedAuthKey.keyType === 0 ? "Static" : "One time"}</td>
+          <td class="pl-2">{selectedAuthKey.keyType === 0 ? "one time" : "static"}</td>
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Creator</th>
@@ -151,7 +151,7 @@
         </tr>
         {#each authKeys as key, index}
           <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" on:click={() => selectAuthKey(index)}>
-            <td class="pl-2">{key.keyType === 0 ? "static" : "one time"}</td>
+            <td class="pl-2">{key.keyType === 0 ? "one time" : "static"}</td>
             <td class="pl-2">{key.key}</td>
             <td class="pl-3">{key.useCount}</td>
             <td class="pl-2">{new Date(key.creationDate).toLocaleString()}</td>

@@ -144,9 +144,7 @@ export const setTasksResults = async (req, res) => {
   for (let result of results){
     try{
       await taskModel.setResult(agentID, result);
-    }catch(error){
-      console.log(error);
-    }
+    }catch(error){}
   }
   return res.json({});
 };

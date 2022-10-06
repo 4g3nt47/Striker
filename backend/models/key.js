@@ -95,7 +95,7 @@ export const authenticate = async (key) => {
   const validKey = await Key.findOne({key});
   if (!validKey)
     return false;
-  if (validKey.keyType !== 0){
+  if (validKey.keyType === 0){
     deleteKey(key);
   }else{
     validKey.useCount++;

