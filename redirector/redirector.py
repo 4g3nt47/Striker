@@ -1,9 +1,18 @@
 #!/usr/bin/python3
+#-----------------------------------------
+# A dumb socket redirector for Striker C2.
+#                       Author: Umar Abdul
+#-----------------------------------------
 
 import sys, socket, threading
 
 class Redirector:
 
+  # Constructor.
+  # `lhost` - Host to listen on.
+  # `lport` - Port to listen on.
+  # `rhost` - Host to forward connections to.
+  # `rport` - Port to forward connections to.
   def __init__(self, lhost, lport, rhost, rport):
     self.lhost = lhost
     self.lport = int(lport)
@@ -11,6 +20,7 @@ class Redirector:
     self.rport = int(rport)
     self.abort = False
 
+  # Start the redirector.
   def start(self):
     print("[*] Starting redirector on %s:%d..." %(self.lhost, self.lport))
     server = socket.socket()
@@ -21,7 +31,7 @@ class Redirector:
       print("[-] Error binding socket: %s" %(str(e)))
       return
     server.listen(10)
-    print("[+] Redirecting %s:%d => %s:%d..." %(self.lhost, self.lport, self.rhost, self.rport))
+    print("[+] Listening for connections...")
     try:
       while True:
         client, addr = server.accept()
@@ -32,6 +42,9 @@ class Redirector:
       server.close()
       return
 
+  # Route a connected client.
+  # `client` - The socket object of the client.
+  # `addr` - The IP address and port of the client.
   def route(self, client, addr):
     server = socket.socket()
     try:
@@ -40,7 +53,7 @@ class Redirector:
       print("[-] Error connecting to remote host: %s:%d - %s" %(self.rhost, self.rport, str(e)))
       client.close()
       return
-    print("[+] Routing %s:%d => %s:%d" %(addr[0], addr[1], self.rhost, self.rport))
+    print("[+] Routing %s:%d => %s:%d..." %(addr[0], addr[1], self.rhost, self.rport))
     server.settimeout(0.05)
     client.settimeout(0.05)
     blockSize = 1024
@@ -63,7 +76,6 @@ class Redirector:
           break
     server.close()
     client.close()
-    print("[+] Disconnected %s:%d => %s:%d" %(addr[0], addr[1], self.rhost, self.rport))
     return
 
 if __name__ == '__main__':

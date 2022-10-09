@@ -1,10 +1,10 @@
-bin/striker: bin/striker.o bin/striker_utils.o bin/cJSON.o bin/builder
-	gcc -Os -ggdb3 -Wall bin/striker.o bin/striker_utils.o bin/cJSON.o -lcurl -lpthread -o bin/striker
-# 	gcc -Os -s -Wall bin/striker.o bin/striker_utils.o bin/cJSON.o -lcurl -lpthread -o bin/striker
+bin/stub: bin/stub.o bin/striker_utils.o bin/cJSON.o bin/builder
+	gcc -Os -ggdb3 -Wall bin/stub.o bin/striker_utils.o bin/cJSON.o -lcurl -lpthread -o bin/stub
+# 	gcc -Os -s -Wall bin/stub.o bin/striker_utils.o bin/cJSON.o -lcurl -lpthread -o bin/stub
 
-bin/striker.o: src/striker.c src/striker.h bin/striker_utils.o
-	gcc -Os -ggdb3 -c -Wall src/striker.c -o bin/striker.o
-# 	gcc -Os -c -Wall src/striker.c -o bin/striker.o
+bin/stub.o: src/striker.c src/striker.h bin/striker_utils.o
+	gcc -Os -ggdb3 -c -Wall src/striker.c -o bin/stub.o
+# 	gcc -Os -c -Wall src/striker.c -o bin/stub.o
 
 bin/striker_utils.o: src/striker_utils.c src/striker_utils.h
 	gcc -Os -ggdb3 -c -Wall src/striker_utils.c -o bin/striker_utils.o

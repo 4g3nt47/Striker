@@ -6,6 +6,7 @@
  *--------------------------------------------------------------
  */
 
+#include <sys/stat.h>
 #include "obfuscator.h"
 
 // The markers we will be patching.
@@ -17,7 +18,7 @@ const char DELAY_MARKER[] = "[STRIKER_DELAY]";
 int main(int argc, char **argv){
   
   if (argc < 6){
-    fprintf(stderr, "[-] Usage: %s <auth_key> <url> <delay> <infile> <outfile>\n", argv[0]);
+    fprintf(stderr, "[-] Usage: %s <auth_key> <url> <delay> <stub> <outfile>\n", argv[0]);
     return 1;
   }
   char *auth_key = argv[1];
@@ -58,7 +59,7 @@ int main(int argc, char **argv){
 
   FILE *rfo = fopen(infile, "r");
   if (!rfo){
-    fprintf(stderr, "[-] Error opening input file!\n");
+    fprintf(stderr, "[-] Error opening stub file!\n");
     return 2;
   }
   FILE *wfo = fopen(outfile, "w");
@@ -145,6 +146,7 @@ int main(int argc, char **argv){
 
   // And we are done :)
   fclose(wfo);
+  chmod(outfile, S_IRUSR | S_IXUSR | S_IWUSR);
   printf("[+] Operation completed!\n");
   return 0;
 }

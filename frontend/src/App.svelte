@@ -17,6 +17,8 @@
   import Users from './components/Users.svelte';
   import TeamChat from './components/TeamChat.svelte';
   import AuthKeys from './components/AuthKeys.svelte';
+  import Redirectors from './components/Redirectors.svelte';
+
 
   // Create a new session tracker.
   const createSession = () => {
@@ -99,9 +101,10 @@
 
     wsInit(session.token);
     loadAgents();
+    loadRedirectors();
+    loadAuthKeys();
     loadTasks();
     loadTeamchatMessages();
-    loadAuthKeys();
     if (session.admin)
       loadUsers();
   };
@@ -245,6 +248,16 @@
       }
     });
 
+    // Called when a new redirector was added.
+    socket.on("new_redirector", (rd) => {
+      redirectors = [rd, ...redirectors];
+    });
+
+    // Called when a redirector was deleted.
+    socket.on("redirector_deleted", (id) => {
+      redirectors = redirectors.filter(r => r._id !== id);
+    });
+
     // Handles custom errors.
     socket.on('striker_error', (err) => {
       console.log("Striker Error: " + err);
@@ -334,7 +347,23 @@
         throw new Error(data.error);
       authKeys = data;
     }catch(err){
-      loadError = "Error loading keys: " + err.message;
+      alert("Error loading keys: " + err.message);
+    }
+  };
+
+  // Load all redirectors.
+  const loadRedirectors = async () => {
+
+    try{
+      const res = await fetch(`${session.api}/redirector`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      redirectors = data;
+    }catch(err){
+      alert("Error loading redirectors: " + err.message);
     }
   };
 
@@ -448,7 +477,8 @@
   let showUserModal = false; // Controls the user management modal of Users.svelte
   let authKeys = []; // Authentication keys for agents.
   let selectedAuthKey = null; // The selected auth key.
-  let showSelectedKeyModal = false;
+  let showSelectedKeyModal = false; // Decides when the modal for a selected key is shown.
+  let redirectors = []; // All available redirectors.
 
   let socket = null;
   let session = loadSession();
@@ -507,6 +537,8 @@
           <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
         {:else if (session.page === "users")}
           <Users {session} {users} {selectedUser} {showUserModal} on:selectUser={selectUser} on:releaseUser={releaseUser}/>
+        {:else if (session.page === "redirectors")}
+          <Redirectors {session} {redirectors}/>
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

