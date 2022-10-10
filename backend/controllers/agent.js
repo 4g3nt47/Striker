@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
 import multer from 'multer';
 import Agent, * as agentModel from '../models/agent.js';
 import Key, * as keyModel from '../models/key.js';
@@ -245,7 +246,7 @@ export const getAgentFiles = (req, res) => {
 };
 
 /**
- * Used by both agents and users to upload files to the server.
+ * Used by both agents and operators to upload files to the server.
  */
 export const uploadFile = (req, res) => {
   
@@ -282,15 +283,18 @@ export const uploadFile = (req, res) => {
         uid,
         agentID: agentID,
         name: orgName,
+        size: req.file.size,
+        downloadsCount: 0,
         dateCreated: Date.now()
       });
       await file.save();
       delete orgFilenames[uid];
       let msg = userUpload ? (global.serverPrompt + `File received from user '${req.session.username}': ${uid} - ${orgName}`) : (global.serverPrompt + `File received from agent: ${uid} - ${orgName}`);
-      socketServer.emit("agent_console_output", {
+      global.socketServer.emit("agent_console_output", {
         agentID: agentID.toString(),
         msg
       });
+      global.socketServer.emit("new_file", file);
       // Task agent to download the file if user is the one uploading.
       if (userUpload){
         const task = {
@@ -311,7 +315,33 @@ export const uploadFile = (req, res) => {
 };
 
 /**
- * Download a file using it's ID.
+ * Re-upload a file to an agent by creating a new upload task with an existing file.
+ */
+export const reuploadFile = async (req, res) => {
+
+  if (!req.session.loggedIn)
+    return res.status(403).json(PERM_ERROR);
+  const agentID = req.params.agentID;
+  const fileID = req.params.fileID;
+  const file = await File.findOne({uid: fileID});
+  if (!file)
+    return res.status(404).json({error: "Invalid file!"});
+  taskModel.createTask(req.session.username, {
+    agentID,
+    taskType: "upload",
+    data: {
+      fileID,
+      name: file.name
+    }
+  }).then(data => {
+    return res.json({success: "Upload task created successfully!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
+  });
+};
+
+/**
+ * Download a file using it's ID. Used by both operators and agents.
  */
 export const downloadFile = async (req, res) => {
 
@@ -319,8 +349,30 @@ export const downloadFile = async (req, res) => {
   const file = await File.findOne({uid: fileID});
   if (!file)
     return res.status(404).json({error: "Invalid file!"});
-  res.download(`${global.UPLOAD_LOCATION}${fileID}`, file.name, (err) => {
-    if (err)
+  res.download(`${global.UPLOAD_LOCATION}${fileID}`, file.name, async (err) => {
+    if (err){
       console.log(err);
+    }else{
+      file.downloadsCount++;
+      await file.save();
+      global.socketServer.emit("file_updated", file);
+    }
+  });
+};
+
+/**
+ * Delete an uploaded file.
+ */
+export const deleteFile = (req, res) => {
+
+  if (!req.session.loggedIn)
+    return res.status(403).json(PERM_ERROR);
+  const agentID = req.params.agentID;
+  const fileID = req.params.fileID;
+  fileModel.deleteFile(agentID, fileID).then(data => {
+    global.socketServer.emit("file_deleted", fileID);
+    return res.json({success: "File deleted!"});
+  }).catch(error => {
+    return res.status(403).json({error: error.message});
   });
 };

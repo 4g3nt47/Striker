@@ -7,7 +7,7 @@ import {Router} from 'express';
 import {
   getAgent, getAgents, agentInit, freezeAgent, unfreezeAgent, deleteAgent, agentPing,
   createTask, getAllTasks, getPendingTasks, getTasks, setTasksResults, deleteTask,
-  uploadFile, downloadFile, getAgentFiles
+  uploadFile, reuploadFile, downloadFile, getAgentFiles, deleteFile
 } from '../controllers/agent.js';
 
 const router = Router();
@@ -32,6 +32,8 @@ router.get("/ping/:agentID", agentPing);
 // File routes
 router.get("/files/:agentID", getAgentFiles);
 router.post("/upload/:agentID", uploadFile);
+router.get("/upload/:agentID/:fileID", reuploadFile);
 router.get("/download/:fileID", downloadFile);
+router.delete("/file/:agentID/:fileID", deleteFile);
 
 export default router;

@@ -20,6 +20,15 @@ const fileSchema = mongoose.Schema({
     type: String,
     required: true
   },
+  size: {
+    type: Number,
+    required: true
+  },
+  downloadsCount: {
+    type: Number,
+    default: 0,
+    required: true,
+  },
   dateCreated: {
     type: Number,
     required: true

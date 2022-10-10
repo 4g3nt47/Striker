@@ -96,7 +96,7 @@ export const setupWS = (httpServer) => {
         const agent = data.agent;
         const agentID = agent.uid.toString();
         const input = data.input.toString().trim();
-        socketServer.emit("agent_console_output", {
+        client.emit("agent_console_output", {
           agentID,
           msg: `${username} > ${input}`
         });
@@ -198,7 +198,7 @@ export const setupWS = (httpServer) => {
         }
       }catch(error){
         console.log(error);
-        socketServer.emit("striker_error", error.message);
+        client.emit("striker_error", error.message);
       }
     });
 
