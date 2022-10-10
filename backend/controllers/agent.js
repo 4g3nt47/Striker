@@ -42,6 +42,19 @@ export const agentInit = async (req, res) => {
 };
 
 /**
+ * Used by agents for pinging the server without fetching new tasks.
+ * Gives a 200 response if the agent exists in the database.
+ */
+export const agentPing = async (req, res) => {
+
+  const agentID = req.params.agentID;
+  const valid = await Agent.findOne({uid: agentID});
+  if (valid)
+    return res.json({success: "pong"});
+  return res.status(404).json({});
+};
+
+/**
  * Get all agents. For authenticated users only.
  */
 export const getAgents = (req, res) => {

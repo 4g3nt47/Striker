@@ -5,7 +5,7 @@
 
 import {Router} from 'express';
 import {
-  getAgent, getAgents, agentInit, freezeAgent, unfreezeAgent, deleteAgent,
+  getAgent, getAgents, agentInit, freezeAgent, unfreezeAgent, deleteAgent, agentPing,
   createTask, getAllTasks, getPendingTasks, getTasks, setTasksResults, deleteTask,
   uploadFile, downloadFile, getAgentFiles
 } from '../controllers/agent.js';
@@ -27,6 +27,7 @@ router.post("/init", agentInit);
 router.get("/freeze/:agentID", freezeAgent);
 router.get("/unfreeze/:agentID", unfreezeAgent);
 router.delete("/:agentID", deleteAgent);
+router.get("/ping/:agentID", agentPing);
 
 // File routes
 router.get("/files/:agentID", getAgentFiles);
