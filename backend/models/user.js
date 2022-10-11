@@ -115,7 +115,7 @@ export const deleteUser = async (username) => {
 };
 
 /**
- * Login user. Will always fail for suspended users.
+ * Login user if not already logged in. Will always fail for suspended users.
  * @param {string} username - The username submitted
  * @param {string} password - The password submitted
  * @return {object} The user's profile
@@ -127,9 +127,19 @@ export const loginUser = async (username, password) => {
   const user = await User.findOne({username, suspended: false});
   if (!(user && (await user.validatePassword(password) === true)))
     throw new Error("Authentication failed!");
+  if (global.socketObjects[username])
+    throw new Error("Already logged in. Please close other sessions to continue.");
   user.lastSeen = Date.now();
   await user.save();
-  global.adminWSEmit("user_updated", await getUser(user.username));
+  user.loggedIn = true;
+  global.adminWSEmit("user_updated", {
+    username,
+    admin: false,
+    suspended: false,
+    creationDate: Date.now(),
+    lastSeen: Date.now(),
+    loggedIn: true
+  });
   return user;
 };
 
@@ -205,7 +215,8 @@ export const getUser = async (username) => {
     admin: user.admin,
     suspended: user.suspended,
     creationDate: user.creationDate,
-    lastSeen: user.lastSeen
+    lastSeen: user.lastSeen,
+    loggedIn: global.socketObjects[user.username] !== undefined
   };
 };
 
@@ -223,7 +234,8 @@ export const getUsers = async () => {
       admin: user.admin,
       suspended: user.suspended,
       creationDate: user.creationDate,
-      lastSeen: user.lastSeen
+      lastSeen: user.lastSeen,
+      loggedIn: global.socketObjects[user.username] !== undefined
     });
   }
   return users;
@@ -256,7 +268,7 @@ export const revokeAdmin = async (username) => {
 };
 
 /**
- * Suspend a user account.
+ * Suspend a user account and kill any active session it has.
  * @param {string} username - The target user's username.
  * @return {object} The query result.
  */
@@ -265,6 +277,8 @@ export const suspendUser = async (username) => {
   const data = await User.updateOne({username: username.toString(), suspended: false}, {suspended: true});
   if (data.modifiedCount > 0)
     global.adminWSEmit("user_updated", await getUser(username.toString()));
+  if (global.socketObjects[username])
+    global.socketObjects[username].disconnect(true);
   return data;
 };
 

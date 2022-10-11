@@ -7,7 +7,7 @@ import * as model from '../models/redirector.js';
 
 export const addRedirector = (req, res) => {
 
-  if (req.session.loggedIn !== true)
+  if (!req.session.loggedIn)
     return res.status(403).json({error: "Permission denied!"});
   model.addRedirector(req.body.url).then(data => {
     return res.json({success: "Redirector added!"});
@@ -18,7 +18,7 @@ export const addRedirector = (req, res) => {
 
 export const deleteRedirector = (req, res) => {
 
-  if (req.session.loggedIn !== true)
+  if (!req.session.loggedIn)
     return res.status(403).json({error: "Permission denied!"});
   model.deleteRedirector(req.params.id).then(data => {
     return res.json({success: "Redirector deleted!"});
@@ -29,7 +29,7 @@ export const deleteRedirector = (req, res) => {
 
 export const getRedirectors = (req, res) => {
 
-  if (req.session.loggedIn !== true)
+  if (!req.session.loggedIn)
     return res.status(403).json({error: "Permission denied!"});
   model.getRedirectors().then(data => {
     return res.json(data);

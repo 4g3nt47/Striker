@@ -127,6 +127,10 @@
             <td class="pl-2">{selectedUser.username}</td>
           </tr>
           <tr class="border-2 border-gray-900">
+            <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Logged In</th>
+            <td class="pl-2">{selectedUser.loggedIn ? "Yes" : "No"}</td>
+          </tr>
+          <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Created</th>
             <td class="pl-2">{new Date(selectedUser.creationDate).toLocaleString()}</td>
           </tr>
@@ -156,7 +160,7 @@
       <th><Fa icon={icons.faCrown} class="inline-block w-10 text-red-500"/>Admin</th>
     </tr>
     {#each users as user, index}
-      <tr transition:slide|local={{duration: 200}} class={"cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" + (user.suspended ? " text-cyan-700" : "")} on:click={() => selectUser(index)}>
+      <tr transition:slide|local={{duration: 200}} class={"cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" + (user.suspended ? " text-cyan-700" : (user.loggedIn ? " text-green-900" : ""))} on:click={() => selectUser(index)}>
         <td class="pl-2">{user.username}</td>
         <td class="pl-2">{new Date(user.creationDate).toLocaleString()}</td>
         <td class="pl-2">{new Date(user.lastSeen).toLocaleString()}</td>

@@ -509,15 +509,14 @@
       <!-- The side nav -->
       <div class="page-nav bg-gray-900 border-gray-300 text-gray-300 col-span-1 pl-5 pt-10 shadow-md shadow-black">
         <ul class="main-nav">
-          <li on:click={() => switchPage("agents")}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
-          <li on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
-          <li on:click={() => switchPage("keys")}><Fa icon={icons.faKey} class="inline-block w-10"/>Auth Keys</li>
-          <li on:click={() => switchPage("chat")}><Fa icon={icons.faMessage} class="inline-block w-10"/>Team Chat</li>
+          <li class={session.page === "agents" ? "text-green-600" : ""} on:click={() => switchPage("agents")}><Fa icon={icons.faRobot} class="inline-block w-10"/>Agents</li>
+          <li class={session.page === "redirectors" ? "text-green-600" : ""} on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
+          <li class={session.page === "keys" ? "text-green-600" : ""} on:click={() => switchPage("keys")}><Fa icon={icons.faKey} class="inline-block w-10"/>Auth Keys</li>
+          <li class={session.page === "chat" ? "text-green-600" : ""} on:click={() => switchPage("chat")}><Fa icon={icons.faMessage} class="inline-block w-10"/>Team Chat</li>
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
-            <li on:click={() => switchPage("admin")}><Fa icon={icons.faCrown} class="inline-block w-10"/>Admin</li>
-            <li on:click={() => switchPage("users")}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
-            <li on:click={() => switchPage("logs")}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Logs</li>
+            <li class={session.page === "users" ? "text-green-600" : ""} on:click={() => switchPage("users")}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
+            <li class={session.page === "logs" ? "text-green-600" : ""} on:click={() => switchPage("logs")}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Logs</li>
           {/if}
           <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10"/>Logout</li>
         </ul>

@@ -242,6 +242,7 @@ export const setupWS = (httpServer) => {
       if (global.adminSocketObjects[username])
         delete global.adminSocketObjects[username];
       output(`WS: User '${username}' has disconnect!`);
+      socketServer.emit("new_teamchat_message", `***** User '${username}' has logged out! *****`);
     });
 
   });

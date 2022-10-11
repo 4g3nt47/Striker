@@ -3,8 +3,6 @@
  * @author Umar Abdul
  */
 
-import dotenv from 'dotenv';
-dotenv.config();
 import User, * as model from '../models/user.js';
 
 const PERM_ERROR = {error: "Permission denied!"}
@@ -25,6 +23,8 @@ export const deleteUser = (req, res) => {
   if (req.session.admin !== true)
     return res.status(403).json(PERM_ERROR);
   model.deleteUser(req.params.username).then(() => {
+    if (global.socketObjects[req.session.username])
+      global.socketObjects[req.session.username].disconnect(true);
     return res.json({success: "User deleted!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -36,23 +36,29 @@ export const loginUser = (req, res) => {
   model.loginUser(req.body.username, req.body.password).then(async (user) => {
     model.setupSession(req.session, user);
     const token = await model.createToken(user.username);
+    global.socketServer.emit("new_teamchat_message", `***** User '${req.session.username}' has logged in! *****`)
     return res.json({
       username: user.username,
       admin: user.admin,
       token
     });
   }).catch(error => {
-    return res.status(403).json({error: "Authentication failed!"});
+    return res.status(403).json({error: error.message});
   });
 };
 
-export const logoutUser = (req, res) => {
+export const logoutUser = async (req, res) => {
   
   if (req.session.loggedIn){
     const username = req.session.username;
-    global.socketObjects[username].disconnect(true); // Close the web socket connection. Will trigger the 'disconnect' handler in ws-server.js
+    const sock = global.socketObjects[username];
+    if (sock)
+      sock.disconnect(true); // Close the web socket connection. Will trigger the 'disconnect' handler in ws-server.js
     model.deleteToken(username);
+    const user = await model.getUser(req.session.username);
     req.session.destroy();
+    user.loggedIn = false;
+    global.adminWSEmit("user_updated", user);
     return res.json({success: "You have been logged out!"});
   }else{
     return res.status(403).json(PERM_ERROR);

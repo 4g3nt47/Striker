@@ -65,7 +65,6 @@ export default Agent;
  */
 export const createAgent = async (data) => {
 
-  const socketServer = global.socketServer;
   const uid = crypto.randomBytes(8).toString('hex');
   const agent = new Agent({
     uid,
@@ -79,7 +78,8 @@ export const createAgent = async (data) => {
     lastSeen: Date.now()
   });
   await agent.save();
-  socketServer.emit("new_agent", agent);
+  global.socketServer.emit("new_agent", agent);
+  global.socketServer.emit("new_teamchat_message", `***** New agent called home: '${agent.uid}' *****`);
   const config = {
     uid: agent.uid
   };
