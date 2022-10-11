@@ -23,11 +23,11 @@
   // Create a new session tracker.
   const createSession = () => {
 
-    const backend = "localhost:3000";
+    const backend = "striker-api.debian.local";
     return ({
-      backend: "localhost:3000",
-      api: `http://${backend}`,
-      ws: `ws://${backend}`,
+      backend,
+      api: `https://${backend}`,
+      ws: `https://${backend}`,
       username: "",
       loggedIn: false,
       admin: false,
@@ -115,6 +115,7 @@
 
     // Connect and authenticate.
     socket = io(session.ws, {
+      secure: true,
       auth: {
         token
       }

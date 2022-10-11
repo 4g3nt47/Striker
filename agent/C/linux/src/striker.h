@@ -56,10 +56,11 @@ char *obfs_decode(char *str);
 
 /**
  * Initializes a new CURL object for a request to `path` relative to the base URL of the C2 server.
+ * If `absolute` is non-zero, `path` will be treated as absolute URL.
  * It does not define any headers.
  * Defines `buff` as the buffer to use for writing reponse body by the body_receiver() function.
  */
-CURL *init_curl(const char *path, buffer *buff);
+CURL *init_curl(const char *path, buffer *buff, unsigned char absolute);
 
 /**
  * Callback function for curl to receive response body inside a buffer.
