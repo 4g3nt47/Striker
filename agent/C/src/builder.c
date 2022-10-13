@@ -6,6 +6,9 @@
  *--------------------------------------------------------------
  */
 
+#ifdef __WIN32__
+  #include <windows.h>
+#endif
 #include <sys/stat.h>
 #include "obfuscator.h"
 

@@ -11,6 +11,9 @@
  *--------------------------------------------------------------------------------------
  */
 
+#ifdef __WIN32__
+  #include <windows.h>
+#endif
 #include "obfuscator.h"
 
 // The marker for strings to obfuscate.

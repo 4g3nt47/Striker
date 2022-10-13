@@ -143,7 +143,7 @@ void queue_free(queue *q, unsigned short items){
   free(q);
 }
 
-long find_offset(FILE *rfo, const void *target, size_t len){
+ssize_t find_offset(FILE *rfo, const void *target, size_t len){
 
   void *buff = malloc(len);
   int c;
