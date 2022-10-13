@@ -1,8 +1,9 @@
 #!/usr/bin/python3
-#-----------------------------------------
-# A dumb socket redirector for Striker C2.
-#                       Author: Umar Abdul
-#-----------------------------------------
+#---------------------------------------------------------------------------------------
+#      A dumb pipe redirector for Striker C2. This on it's own is NOT good/recommended
+# way to route traffic to the C2 server. See the README.md
+#                                                                     Author: Umar Abdul
+#---------------------------------------------------------------------------------------
 
 import sys, socket, threading
 
@@ -54,9 +55,11 @@ class Redirector:
       client.close()
       return
     print("[+] Routing %s:%d => %s:%d..." %(addr[0], addr[1], self.rhost, self.rport))
-    server.settimeout(0.05)
-    client.settimeout(0.05)
-    blockSize = 1024
+    # Small timeouts for faster routing.
+    server.settimeout(0.005)
+    client.settimeout(0.005)
+    # Max bytes to read at a time from server/client. Need to be large or file uploads/downloads will be slow.
+    blockSize = 999999
     while not self.abort:
       try:
         data = client.recv(blockSize)

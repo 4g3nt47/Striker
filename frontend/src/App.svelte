@@ -23,11 +23,8 @@
   // Create a new session tracker.
   const createSession = () => {
 
-    const backend = "striker-api.debian.local";
     return ({
-      backend,
-      api: `https://${backend}`,
-      ws: `https://${backend}`,
+      api: import.meta.env.VITE_STRIKER_API,
       username: "",
       loggedIn: false,
       admin: false,
@@ -114,8 +111,7 @@
   const wsInit = (token) => {
 
     // Connect and authenticate.
-    socket = io(session.ws, {
-      secure: true,
+    socket = io(session.api, {
       auth: {
         token
       }
@@ -491,6 +487,11 @@
       session.page = "agents";
     else
       session.page = "login";
+  }
+
+  if (session.page === "login" || session.page === "register"){
+    localStorage.removeItem("striker");
+    session = createSession();
   }
 
 </script>

@@ -26,9 +26,12 @@
 // Max URL length allowed
 #define URL_SIZE (sizeof(char) * 256)
 
-// SSL config
-#define SKIP_PEER_VERIFICATION
-#define SKIP_HOST_VERIFICATION
+/**
+ * Uncomment these macros to disable SSL verification.
+ * Very insecure, but required for using self-signed SSL certs.
+ */
+// #define SKIP_PEER_VERIFICATION
+// #define SKIP_HOST_VERIFICATION
 
 // Markers for the agent builder.
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]";

@@ -6,8 +6,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import fs from 'fs';
-import https from 'https';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -101,27 +99,13 @@ app.use((error, req, res, next) => {
   return res.status(500).json({error: error.message});
 });
 
-// Load SSL keys
-let sslKey = null, sslCert = null;
-try{
-  sslKey = fs.readFileSync("ssl/striker.key");
-  sslCert = fs.readFileSync("ssl/striker.pem");
-}catch(error){
-  output(`Error loading SSL keys: ${error.message}`);
-  process.exit(1);
-}
-
 // Start the API server
 output("Connecting to backend database...");
 mongoose.connect(DB_URL).then(() => {
   
   output("Starting HTTPs server...");
-  const httpsServer = https.createServer({
-    key: sslKey,
-    cert: sslCert
-  }, app);
-  httpsServer.listen(PORT, () => {
+  const httpServer = app.listen(PORT, '127.0.0.1', () => {
     output("Server started on port: " + PORT);
+    setupWS(httpServer);
   });
-  setupWS(httpsServer);
 });

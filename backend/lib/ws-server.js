@@ -53,7 +53,6 @@ export const setupWS = (httpServer) => {
       users[socket.id] = user.username;
       next();
     }).catch(error => {
-      console.log(error);
       return next(new Error("Access denied!"));
     });
   });

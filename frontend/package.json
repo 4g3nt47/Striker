@@ -7,7 +7,7 @@
     "dev": "vite --port 8000",
     "tailwindcss": "tailwindcss -i src/input.tailwind.css -o src/style.css --watch",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --port 8000"
   },
   "devDependencies": {
     "@fortawesome/free-solid-svg-icons": "^6.2.0",
