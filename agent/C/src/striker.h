@@ -119,8 +119,12 @@ task *parse_task(cJSON *json);
 // Free a task.
 void free_task(task *tsk);
 
-// Executes a task in a background thread.
-void *task_executor(void *ptr);
+// Wrapper for starting a thread to execute a task.
+#ifdef IS_LINUX
+  void *task_executor(void *ptr);
+#else
+  DWORD WINAPI task_executor(LPVOID ptr);
+#endif
 
 // Starts the implant.
 void start_session();

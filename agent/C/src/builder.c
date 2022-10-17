@@ -9,6 +9,7 @@
 #ifdef __WIN32__
   #include <windows.h>
 #endif
+#include <time.h>
 #include <sys/stat.h>
 #include "obfuscator.h"
 
@@ -43,15 +44,9 @@ int main(int argc, char **argv){
   char *outfile = argv[5];
 
   // Generate random key for string obfuscation.
-  FILE *rrfo = fopen("/dev/random", "r");
-  if (!rrfo){
-    fprintf(stderr, "[-] Error opening /dev/random\n");
-    return 1;
-  }
   unsigned char obfs_key;
-  while ((obfs_key = fgetc(rrfo)) == 0)
-    continue;
-  fclose(rrfo);
+  srand(time(NULL));
+  obfs_key = (unsigned char)rand();
   char obfs_key_str[4];
   snprintf(obfs_key_str, 4, "%d", obfs_key);
 
@@ -60,12 +55,12 @@ int main(int argc, char **argv){
     return 1;
   }
 
-  FILE *rfo = fopen(infile, "r");
+  FILE *rfo = fopen(infile, "rb");
   if (!rfo){
     fprintf(stderr, "[-] Error opening stub file!\n");
     return 2;
   }
-  FILE *wfo = fopen(outfile, "w");
+  FILE *wfo = fopen(outfile, "wb");
   if (!wfo){
     fprintf(stderr, "[-] Error opening output file!\n");
     return 2;
