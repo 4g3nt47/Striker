@@ -1,4 +1,12 @@
 <script>
+
+  /**
+   * @file Redirectors component.
+   * @author Umar Abdul
+   * Props:
+   *        session - The session object.
+   *        redirectors - An array of all available redirectors.
+   */
   
   import {slide} from 'svelte/transition';
   import Button from './Button.svelte';

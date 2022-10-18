@@ -103,7 +103,7 @@ app.use((error, req, res, next) => {
 output("Connecting to backend database...");
 mongoose.connect(DB_URL).then(() => {
   
-  output("Starting HTTPs server...");
+  output("Starting HTTP server...");
   const httpServer = app.listen(PORT, '127.0.0.1', () => {
     output("Server started on port: " + PORT);
     setupWS(httpServer);

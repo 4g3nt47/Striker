@@ -1,5 +1,15 @@
 <script>
 
+  /**
+   * @file User login component.
+   * @author Umar Abdul
+   * Props:
+   *        session - The session object.
+   * Events:
+   *        loggedIn - On successful login.
+   *        switchPage - To switch page.
+   */
+
   import {onMount, createEventDispatcher} from 'svelte';
   import Button from './Button.svelte';
   import SuccessMsg from './SuccessMsg.svelte';

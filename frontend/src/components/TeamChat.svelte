@@ -1,5 +1,15 @@
 <script>
-  
+
+  /**
+   * @file Team chat component.
+   * @author Umar Abdul
+   * Props:
+   *        messages - An array of all messages.
+   * 
+   * Events:
+   *        sendMessage - When sending a new message.
+   */
+
   import {onMount, createEventDispatcher} from 'svelte';
 
   export let messages = [];

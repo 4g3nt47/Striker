@@ -1,5 +1,18 @@
 <script>
 
+  /**
+   * @file Agents authentication keys component.
+   * @author Umar Abdul
+   * Props:
+   *        session - The session object.
+   *        authKeys - An array of all available authentication keys.
+   *        selectedAuthKey - The selected key.
+   *        showSelectedKeyModal - Controls the visibility of the key modal.
+   * Events:
+   *        selectAuthKey - When user clicks on a listed key.
+   *        releaseAuthKey - Release the selected key.
+   */
+
   import {createEventDispatcher} from 'svelte';
   import {slide} from 'svelte/transition';
   import Button from './Button.svelte';
@@ -21,6 +34,7 @@
   let addKeyError = "";
   let selectedKeyModalError = "";
 
+  // Called when adding a key.
   const addKeyInit = () => {
 
     inputKey = "";
@@ -30,6 +44,7 @@
     showAddKeyModal = true;
   };
 
+  // Adds an auth key.
   const addKey = async () => {
 
     try{
@@ -53,6 +68,7 @@
     }
   };
 
+  // Deletes the selected key.
   const deleteKey = async () => {
 
     if (!confirm("Are you sure?"))
@@ -71,10 +87,12 @@
     }
   };
 
+  // Select a key
   const selectAuthKey = (index) => {
     dispatch("selectAuthKey", index);
   };
-
+ 
+  // Release a key
   const releaseAuthKey = () => {
     selectedKeyModalError = "";
     dispatch("releaseAuthKey");
@@ -141,6 +159,7 @@
   {#if (authKeys.length === 0)}
     <ErrorMsg error="No keys available!"/>
   {:else}
+    <!-- Display available auth keys -->
     <div class="mt-5">
       <table class="border-2 border-gray-900 w-full font-mono text-left text-lg">
         <tr class="bg-gray-900 text-white">

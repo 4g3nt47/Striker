@@ -1,5 +1,14 @@
 <script>
 
+  /**
+   * @file Account registration component.
+   * @author Umar Abdul
+   * Props:
+   *        session - The session object.
+   * Events:
+   *        switchPage - For switching page.
+   */
+
   import {onMount, createEventDispatcher} from 'svelte';
   import Button from './Button.svelte';
   import SuccessMsg from './SuccessMsg.svelte';

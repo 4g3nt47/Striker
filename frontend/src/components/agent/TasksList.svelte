@@ -1,11 +1,17 @@
 <script>
   
   /**
-   * @file This component displays a list of all available tasks for an agent.
+   * @file Tasks list component.
    * @author Umar Abdul
    * Props:
-   *          socket - The connected ws object.
-   *          tasks - The tasks to list.
+   *          socket - The WS object.
+   *          tasks - An array of tasks.
+   *          showTaskModal - Controls modal visibility.
+   *          selectedTask - The selected task.
+   *          selectedTaskData - The data of selected task.
+   * Events:
+   *          selectTask - When selecting a task.
+   *          releaseTask - When releasing a task.
    */
 
   import {createEventDispatcher} from 'svelte';

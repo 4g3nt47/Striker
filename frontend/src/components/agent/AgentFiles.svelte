@@ -1,5 +1,14 @@
 <script>
   
+  /**
+   * @file Agent files management component.
+   * @author Umar Abdul
+   * Props:
+   *        session - The session object.
+   *        socket - The WS object.
+   *        agent - The agent.
+   */
+
   import {onMount} from 'svelte';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';

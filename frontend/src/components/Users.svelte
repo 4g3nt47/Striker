@@ -3,6 +3,14 @@
   /**
    * @file User management UI for admins.
    * @author Umar Abdul
+   * Props:
+   *        session - The session object.
+   *        users - An array of all users.
+   *        selectedUser - The currently selected user.
+   *        showUserModal - Controls modal visibility.
+   * Events:
+   *        selectUser - When selecting a user.
+   *        releaseUser - When releasing selected user.
    */
 
   import {createEventDispatcher} from 'svelte';

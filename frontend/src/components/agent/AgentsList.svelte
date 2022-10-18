@@ -1,8 +1,13 @@
 <script>
   
   /**
-   * @file This component displays a list of all agents.
+   * @file Agents list component.
    * @author Umar Abdul
+   * Props:
+   *        agents - An array of all agents.
+   *        tasks - An array of all tasks.
+   * Events:
+   *        selectedAgent - When selecting an agent.
    */
   
   import {createEventDispatcher} from 'svelte';

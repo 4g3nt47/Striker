@@ -9,15 +9,13 @@
     "build": "vite build",
     "preview": "vite preview --port 8000"
   },
-  "devDependencies": {
-    "@fortawesome/free-solid-svg-icons": "^6.2.0",
-    "@sveltejs/vite-plugin-svelte": "^1.0.1",
+  "dependencies": {
+    "vite": "^3.0.0",
     "svelte": "^3.49.0",
     "svelte-fa": "^3.0.3",
     "tailwindcss": "^3.1.8",
-    "vite": "^3.0.0"
-  },
-  "dependencies": {
+    "@fortawesome/free-solid-svg-icons": "^6.2.0",
+    "@sveltejs/vite-plugin-svelte": "^1.0.1",
     "socket.io-client": "^4.5.2"
   }
 }

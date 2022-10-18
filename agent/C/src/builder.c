@@ -1,9 +1,9 @@
 /**
- *--------------------------------------------------------------
- *    A preprocessor for the Striker implants. Handles patching, 
- * and obfuscation of a newly compiled implant.
- *                                            Author: Umar Abdul
- *--------------------------------------------------------------
+ *------------------------------------------------------------------------------
+ *   A utility for Striker. Used for the patching and obfuscation of agent stubs
+ * to generate working implants.
+ *                                                            Author: Umar Abdul
+ *------------------------------------------------------------------------------
  */
 
 #ifdef __WIN32__
@@ -67,7 +67,8 @@ int main(int argc, char **argv){
   }
 
   // 1. Obfuscate strings.
-  obfs_run(wfo, rfo, obfs_key, 1);
+  printf("[*] Obfuscating strings...\n");
+  obfs_run(wfo, rfo, obfs_key, 0);
 
   // 2. Patch.
   printf("[*] Finding offsets of our markers...\n");
@@ -129,6 +130,7 @@ int main(int argc, char **argv){
   buffer = malloc(sizeof(char) * (len + 1));
   memset(buffer, 0, len);
   strncpy(buffer, auth_key, len);
+  obfs_encode(obfs_key, buffer);
   fseek(wfo, (long)auth_key_offset, SEEK_SET);
   fwrite(buffer, sizeof(char), len, wfo);
   free(buffer);

