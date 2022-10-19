@@ -167,21 +167,25 @@ export const setupWS = (httpServer) => {
             });
           }else{
             delay = parseInt(delay);
+            const onComplete = async (agent, task) => {
+              if (task.successful)
+                agent.delay = task.data.delay;
+            };
             taskModel.createTask(username, {
               agentID, taskType: "delay", data: {delay}
-            }).then(() => {
-              agentModel.updateDelay(agentID, delay).catch(error => {
-                client.emit("striker_error", error.message);
-              });
-            }).catch(error => {
+            }, onComplete).catch(error => {
               client.emit("striker_error", error.message);
             });
           }
         }else if (input.startsWith("cd ")){
           let dirname = input.substr(3).trim();
+          const onComplete = async (agent, task) => {
+            if (task.successful)
+              agent.cwd = task.data.dir;
+          };
           taskModel.createTask(username, {
             agentID, taskType: "cd", data: {dir: dirname}
-          }).catch(error => {
+          }, onComplete).catch(error => {
             client.emit("striker_error", error.message);
           });
         }else if (input === "abort"){

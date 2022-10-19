@@ -124,23 +124,6 @@ export const updateLastSeen = async (agentID) => {
 };
 
 /**
- * Update the callback delay of an agent. Emits the "update_agent" ws event on success.
- * @param {string} agentID - ID of the agent.
- * @param {number} delay - The new delay, in seconds.
- * @return {object} The updated agent.
- */
-export const updateDelay = async (agentID, delay) => {
-
-  const agent = await Agent.findOne({uid: agentID.toString()});
-  if (!agent)
-    throw new Error("Invalid agent!");
-  agent.delay = (delay > 0 ? delay : global.AGENT_DELAY);
-  await agent.save();
-  global.socketServer.emit("update_agent", agent);
-  return agent;
-};
-
-/**
  * Freeze an agent. Emits the "update_agent" ws event on success and also update users console.
  * @param {string} agentID - The ID of the agent.
  * @param {string} username - The user requesting the action.

@@ -53,6 +53,7 @@ typedef struct{
   char *type; // The type of the task
   cJSON *data; // The data needed by the task
   unsigned short completed; // Indicates if the task has been completed.
+  unsigned short successful; // Indicates if the task was successfully completed.
   cJSON *result; // The result of the task.
   cJSON *input_json; // The cJSON object used to generate the task.
 } task;

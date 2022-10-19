@@ -21,9 +21,8 @@ This project is under active development. Most of the features are experimental,
 - Uses web sockets for faster comms.
 
 **C) User Interface**
-- This is a Single Page Application (SPA) made with *Svelte*.
-- Easy to configure as it compiles into files, which can be hosted with event the most basic web server you can find.
 - Smooth and reactive UI thanks to *Svelte* and *SocketIO*.
+- Easy to configure as it compiles into static HTML, JavaScript, and CSS files, which can be hosted with even the most basic web server you can find.
 - Teamchat feature to communicate with other operators over text.
 
 ## Installing Striker
@@ -40,11 +39,11 @@ The codebase is divided into 4 independent sections;
 ### 1. The C2 Server / Backend
 
 This handles all server-side logic for both operators and agents. It is a `NodeJS` application made with;
-1. `express` - For the REST API.
-2. `socket.io` - For Web Socket communtication.
-3. `mongoose` - For connecting to *MongoDB*.
-4. `multer` - For handling file uploads.
-5. `bcrypt` - For hashing user passwords.
+- `express` - For the REST API.
+- `socket.io` - For Web Socket communtication.
+- `mongoose` - For connecting to *MongoDB*.
+- `multer` - For handling file uploads.
+- `bcrypt` - For hashing user passwords.
 
 The source code is in the `backend/` directory. To setup the server;
 
@@ -130,7 +129,7 @@ VITE_STRIKER_API=https://c2.striker.local
 $ npm run build
 ```
 
-The above will compile everything into a static web application in `dist/` directory. You can move all the files inside into the web root of your web server, or event host it with a basic HTTP server like that of python;
+The above will compile everything into a static web application in `dist/` directory. You can move all the files inside into the web root of your web server, or even host it with a basic HTTP server like that of python;
 
 ```
 $ cd dist
@@ -139,16 +138,16 @@ $ python3 -m http.server 8000
 
 5. Signup;
 
-1. Open the site in a web browser. You should see a login page.
-2. Click on the `Register` button.
-3. Enter a username, password, and the registration key in use (see `REGISTRATION_KEY` in `backend/.env`)
+- Open the site in a web browser. You should see a login page.
+- Click on the `Register` button.
+- Enter a username, password, and the registration key in use (see `REGISTRATION_KEY` in `backend/.env`)
 
 This will create a standard user account. You will need an admin account to access some features. 
 Your first admin account must be created manually, afterwards you can upgrade and downgrade other accounts in the `Users` tab of the web UI.
 
 To create your first admin account;
-1. Connect to the MongoDB database used by the backend.
-2. Update the `users` collection and set the `admin` field of the target user to `true`;
+- Connect to the MongoDB database used by the backend.
+- Update the `users` collection and set the `admin` field of the target user to `true`;
 
 There are different ways you can do this. If you have `mongo` available in you CLI, you can do it using;
 ```bash
@@ -165,11 +164,22 @@ You can now login :)
 
 ### 3. The C2 Redirector
 
-This is located in the directory `redirector/`. It is a simple dumb pipe redirector for routing **unencrypted C2 traffic** for Striker. Except for local testing, you should never use this alone as a redirector. It should only be used between a HTTPs enabled reverse proxy like Nginx to forward unencrypted traffic to the C2 server over plain HTTP, or to another dumb pipe redirector like socat.
+This is located in the directory `redirector/`. It is a simple dumb pipe redirector for routing traffic from one endpoint to another. Except for local testing, you should never use this alone as a redirector. It should only be used between a HTTPs enabled reverse proxy like Nginx to forward traffic to the C2 server over plain HTTP, or to another dumb pipe redirector like socat.
 
-**A) Using Nginx Reverse Proxy as Redirector**
+**A) Dumb Pipe Redirection**
 
-1. Install `nginx`;
+The following example listens on port `3000` on all interfaces and forward to `c2.example.org` on port `80`;
+
+```bash
+$ cd redirector
+$ ./redirector.py 0.0.0.0:3000 c2.example.org:80
+[*] Starting redirector on 0.0.0.0:3000...
+[+] Listening for connections...
+```
+
+**B) Nginx Reverse Proxy as Redirector**
+
+1. Install Nginx;
 
 ```bash
 $ sudo apt install nginx
@@ -232,7 +242,7 @@ If it works, you should get the 404 response used by the backend, like;
 {"error":"Invalid route!"}
 ```
 
-### 4. The Agents
+### 4. The Agents (Implants)
 
 **A) The C Agent**
 
@@ -249,8 +259,8 @@ $ make
 ```
 
 The above compiles everything into the `bin/` directory. You will need only two files to generate working implants;
-1. `bin/stub` - This is the agent stub that will be used as template to generate working implants.
-2. `bin/builder` - This is what you will use to patch the agent stub to generate working implants.
+- `bin/stub` - This is the agent stub that will be used as template to generate working implants.
+- `bin/builder` - This is what you will use to patch the agent stub to generate working implants.
 
 The builder accepts the following arguments;
 ```bash
@@ -259,11 +269,11 @@ $ ./bin/builder
 ```
 
 Where;
-1. `<auth_key>` -  The authentication key to use when connecting to the C2. You can create this in the *auth keys* tab of the web UI.
-2. `<url>` - The server to report to. This should ideally be a redirector, but a direct URL to the server will also work.
-3. `<delay>` - Delay between each callback, in seconds. This should be at least 2, depending on how noisy you want it to be.
-4. `<stub>` - The stub file to read, `bin/stub` in this case.
-5. `<outfile>` - The output filename of the new implant.
+- `<auth_key>` -  The authentication key to use when connecting to the C2. You can create this in the *auth keys* tab of the web UI.
+- `<url>` - The server to report to. This should ideally be a redirector, but a direct URL to the server will also work.
+- `<delay>` - Delay between each callback, in seconds. This should be at least 2, depending on how noisy you want it to be.
+- `<stub>` - The stub file to read, `bin/stub` in this case.
+- `<outfile>` - The output filename of the new implant.
 
 Example;
 ```bash
@@ -292,17 +302,16 @@ C:\Striker\agent> make os=win
 
 This will compile everything into the `bin/` directory, and you will have the builder and the stub as `bin\stub.exe` and `bin\builder.exe`, respectively.
 
-
 **B) The Python Agent**
 
 Striker also comes with a self-contained python agent. This is located at `agent/python/striker.py`. Only the most basic features are implemented in this agent, and is intended to be used where the main C agent could not, or when only basic functionalities are needed.
 
 To configure this agent, open the file and edit the following variables;
-1. `c2URL` - This is the URL to report to.
-2. `authKey` - The authentication key to use.
-3. `delay` - Callback delay, in seconds.
-4. `MAX_FAILED_CONNS` - Number of failed attempts to tolerate before attempting to switch server.
+- `c2URL` - This is the URL to report to.
+- `authKey` - The authentication key to use.
+- `delay` - Callback delay, in seconds.
+- `MAX_FAILED_CONNS` - Number of failed attempts to tolerate before attempting to switch server.
 
 ## Best Wishes
 
-Happy hacking <3
+Happy Hacking! :)

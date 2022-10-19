@@ -7,6 +7,9 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Agent, {getAgent} from './agent.js';
 
+// For storing functions to execute after a task was completed by an agent.
+const taskCallbacks = {};
+
 const taskSchema = mongoose.Schema({
   uid: {
     type: String,
@@ -44,6 +47,11 @@ const taskSchema = mongoose.Schema({
     required: true,
     default: false
   },
+  successful: {
+    type: Boolean,
+    required: true,
+    default: false
+  },
   dateCompleted: {
     type: Number
   },
@@ -59,9 +67,10 @@ export default Task;
  * Create a new task. Emits "new_task" ws event on success.
  * @param {string} owner - The task owner (username of the user that creates the task)
  * @param {object} data - The task data (agentID, taskType, and data)
+ * @param {onComplete} function - An async function to call after the tasks has been completed. Takes 2 arguments; the agent, and the task. If defined, this will be called before saving the updated task and agent object to the database and emitting the 'update_task' and 'update_agent' WS events.
  * @return {object} The task created.
  */
-export const createTask = async (owner, data) => {
+export const createTask = async (owner, data, onComplete) => {
 
   const socketServer = global.socketServer;
   const taskID = crypto.randomBytes(8).toString('hex').trim();
@@ -77,6 +86,8 @@ export const createTask = async (owner, data) => {
     dateCreated: Date.now()
   });
   await task.save();
+  if (onComplete)
+    taskCallbacks[task.uid] = onComplete;
   socketServer.emit("new_task", task);
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
@@ -202,6 +213,7 @@ export const setResult = async (agentID, data) => {
 
   agentID = agentID.toString();
   let taskID = data.uid.toString();
+  let successful = parseInt(data.successful) === 1;
   let result = data.result;
   if (!result)
     result = "";
@@ -212,6 +224,7 @@ export const setResult = async (agentID, data) => {
   if (!(task && task.completed === false))
     throw new Error("Invalid task!");
   task.completed = true;
+  task.successful = successful;
   task.dateCompleted = Date.now();
   if (task.taskType === "keymon"){
     task.result = "";
@@ -322,6 +335,11 @@ export const setResult = async (agentID, data) => {
         task.result += result;
       }
     }
+  }else if (task.taskType === "cd"){
+    if (successful){
+      task.data.dir = result;
+      result = "Changed working directory: " + result;
+    }
   }else{  
     // Cleanup trailing newlines.
     result = result.toString().replace(/\r\n+$/, "");
@@ -332,8 +350,15 @@ export const setResult = async (agentID, data) => {
     if (result)
       task.result = result;
   }
+  const onComplete = taskCallbacks[task.uid];
+  if (onComplete){
+    await onComplete(agent, task);
+    delete taskCallbacks[task.uid];
+  }
   await task.save();
+  await agent.save();
   socketServer.emit("update_task", task);
+  socketServer.emit("update_agent", agent);
   let message = global.serverPrompt + `Task '${task.uid}' (${task.taskType}) completed`
   if (task.result.length > 0)
     message += `. ${task.result.length} bytes received;\n${task.result}`
