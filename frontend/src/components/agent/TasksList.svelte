@@ -114,7 +114,7 @@
       <th><Fa icon={icons.faFlag} class="inline-block w-10 text-green-500"/>Completed</th>
     </tr>
     {#each tasks as task, index}
-      <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" title={JSON.stringify(task.data).substr(0, 100)} on:click={() => selectTask(task)}>
+      <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" title={JSON.stringify(task.data ? task.data : "{}").substr(0, 100)} on:click={() => selectTask(task)}>
         <td class="pl-2">{task.uid}</td>
         <td class="pl-2">{task.taskType}</td>
         <td class="pl-2">{task.owner}</td>

@@ -19,6 +19,7 @@ import agentRoute from './routes/agent.js';
 import chatRoute from './routes/chat.js';
 import keyRouter from './routes/key.js';
 import rdRouter from './routes/redirector.js';
+import logRouter from './routes/log.js';
 
 // Setup global configs.
 const DB_URL = process.env.DB_URL;
@@ -87,6 +88,7 @@ app.use("/agent", agentRoute);
 app.use("/chat", chatRoute);
 app.use("/key", keyRouter);
 app.use("/redirector", rdRouter);
+app.use("/log", logRouter);
 
 // 404
 app.all("*", (req, res) => {

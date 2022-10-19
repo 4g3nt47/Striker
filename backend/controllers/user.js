@@ -4,6 +4,7 @@
  */
 
 import User, * as model from '../models/user.js';
+import {logStatus, logWarning, logError} from '../models/log.js';
 
 const PERM_ERROR = {error: "Permission denied!"}
 
@@ -58,6 +59,7 @@ export const logoutUser = async (req, res) => {
     const user = await model.getUser(req.session.username);
     req.session.destroy();
     user.loggedIn = false;
+    logStatus(`User logged out: ${user.username}`);
     global.adminWSEmit("user_updated", user);
     return res.json({success: "You have been logged out!"});
   }else{
@@ -80,7 +82,7 @@ export const grantAdmin = (req, res) => {
 
   if (req.session.admin !== true)
     return res.status(403).json(PERM_ERROR);
-  model.grantAdmin(req.params.username).then(() => {
+  model.grantAdmin(req.params.username, req.session.username).then(() => {
     return res.json({success: "Admin privileges granted!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -91,7 +93,7 @@ export const revokeAdmin = (req, res) => {
 
   if (req.session.admin !== true)
     return res.status(403).json(PERM_ERROR);
-  model.revokeAdmin(req.params.username).then(() => {
+  model.revokeAdmin(req.params.username, req.session.username).then(() => {
     return res.json({success: "Admin privileges revoked!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -102,7 +104,7 @@ export const suspendUser = (req, res) => {
 
   if (req.session.admin !== true)
     return res.status(403).json(PERM_ERROR);
-  model.suspendUser(req.params.username).then(() => {
+  model.suspendUser(req.params.username, req.session.username).then(() => {
     return res.json({success: "Account suspended!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -113,7 +115,7 @@ export const activateUser = (req, res) => {
   
   if (req.session.admin !== true)
     return res.status(403).json(PERM_ERROR);
-  model.activateUser(req.params.username).then(() => {
+  model.activateUser(req.params.username, req.session.username).then(() => {
     return res.json({success: "Account activated!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -124,7 +126,7 @@ export const resetPassword = (req, res) => {
 
   if (req.session.admin !== true)
     return res.status(403).json(PERM_ERROR);
-  model.resetPassword(req.params.username, req.body.password).then(() => {
+  model.resetPassword(req.params.username, req.body.password, req.session.username).then(() => {
     return res.json({success: "Password changed!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});

@@ -6,6 +6,7 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Agent, {getAgent} from './agent.js';
+import {logStatus, logWarning, logError} from './log.js';
 
 // For storing functions to execute after a task was completed by an agent.
 const taskCallbacks = {};
@@ -86,6 +87,7 @@ export const createTask = async (owner, data, onComplete) => {
     dateCreated: Date.now()
   });
   await task.save();
+  logStatus(`Task '${task.uid}' created for agent '${task.agentID}' by user '${task.owner}'`);
   if (onComplete)
     taskCallbacks[task.uid] = onComplete;
   socketServer.emit("new_task", task);
@@ -93,6 +95,7 @@ export const createTask = async (owner, data, onComplete) => {
     agentID: task.agentID,
     msg: global.serverPrompt + `Task '${task.uid}' (${taskType}) created by '${task.owner}'`
   });
+
   return task;
 };
 
@@ -116,6 +119,7 @@ export const deleteTask = async (agentID, taskID, username) => {
     });
     throw new Error("Invalid task!");
   }
+  logWarning(`Task '${taskID}' deleted for agent '${agentID}' by user '${username}'`);
   socketServer.emit("task_deleted", {
     taskID,
     agentID,
@@ -366,5 +370,6 @@ export const setResult = async (agentID, data) => {
     agentID: task.agentID,
     msg: message
   });
+  logStatus(`Task '${task.uid}' completed!`);
   return task;
 };

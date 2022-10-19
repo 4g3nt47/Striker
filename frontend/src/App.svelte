@@ -5,6 +5,7 @@
    * @author Umar Abdul
    */
 
+  import {slide} from 'svelte/transition';
   import {io} from 'socket.io-client';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
@@ -102,8 +103,10 @@
     loadAuthKeys();
     loadTasks();
     loadTeamchatMessages();
-    if (session.admin)
+    if (session.admin){
       loadUsers();
+      loadEventLogs();
+    }
   };
 
 
@@ -255,6 +258,14 @@
       redirectors = redirectors.filter(r => r._id !== id);
     });
 
+    // Called when a new event log is created.
+    socket.on("new_log", (log) => {
+      
+      if (eventLogs.length >= 250)
+        eventLogs.splice(eventLogs.length() - 1, 1);
+      eventLogs = [log, ...eventLogs];
+    });
+
     // Handles custom errors.
     socket.on('striker_error', (err) => {
       console.log("Striker Error: " + err);
@@ -361,6 +372,22 @@
       redirectors = data;
     }catch(err){
       alert("Error loading redirectors: " + err.message);
+    }
+  };
+
+  // Load event logs.
+  const loadEventLogs = async () => {
+
+    try{
+      const res = await fetch(`${session.api}/log`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      eventLogs = data;
+    }catch(err){
+      alert("Error loading event logs: " + err.message);
     }
   };
 
@@ -476,6 +503,7 @@
   let selectedAuthKey = null; // The selected auth key.
   let showSelectedKeyModal = false; // Decides when the modal for a selected key is shown.
   let redirectors = []; // All available redirectors.
+  let eventLogs = []; // Server event logs. For admins.
 
   let socket = null;
   let session = loadSession();
@@ -518,7 +546,7 @@
           <!-- Addutional menu for administrators -->
           {#if (session.admin)}
             <li class={session.page === "users" ? "text-green-600" : ""} on:click={() => switchPage("users")}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
-            <li class={session.page === "logs" ? "text-green-600" : ""} on:click={() => switchPage("logs")}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Logs</li>
+            <li class={session.page === "logs" ? "text-green-600" : ""} on:click={() => switchPage("logs")}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Event Logs</li>
           {/if}
           <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10"/>Logout</li>
         </ul>
@@ -540,6 +568,26 @@
           <Users {session} {users} {selectedUser} {showUserModal} on:selectUser={selectUser} on:releaseUser={releaseUser}/>
         {:else if (session.page === "redirectors")}
           <Redirectors {session} {redirectors}/>
+        {:else if (session.page === "logs")}
+          {#if (eventLogs.length === 0)}
+            <ErrorMsg error="No event logs available at the moment!"/>
+          {:else}
+            {#each eventLogs as log}
+              {#if (log.logType === 0)}
+                <div transition:slide|local={{duration: 200}} class="font-mono bg-green-500 mt-2 py-1 pl-2 bg-opacity-20 border-l-4 border-green-800">
+                  {new Date(log.date).toLocaleString()}:  {log.message}
+                </div>
+              {:else if (log.logType === 1)}
+                <div transition:slide|local={{duration: 200}} class="font-mono bg-yellow-500 mt-2 py-1 pl-2 bg-opacity-20 border-l-4 border-yellow-800">
+                  {new Date(log.date).toLocaleString()}:  {log.message}
+                </div>
+              {:else}
+                <div transition:slide|local={{duration: 200}} class="font-mono bg-red-500 mt-2 py-1 pl-2 bg-opacity-20 border-l-4 border-red-800">
+                  {new Date(log.date).toLocaleString()}:  {log.message}
+                </div>
+              {/if}
+            {/each}
+          {/if}
         {:else}
           <ErrorMsg error={`Invalid page: ${session.page}`}/>
         {/if}

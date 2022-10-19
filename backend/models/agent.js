@@ -5,6 +5,7 @@
 
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import {logStatus, logWarning, logError} from './log.js';
 
 const agentSchema = mongoose.Schema({
   uid: {
@@ -78,6 +79,7 @@ export const createAgent = async (data) => {
     lastSeen: Date.now()
   });
   await agent.save();
+  logStatus(`New agent called home: '${agent.uid}'`);
   global.socketServer.emit("new_agent", agent);
   global.socketServer.emit("new_teamchat_message", `***** New agent called home: '${agent.uid}' *****`);
   const config = {
@@ -137,6 +139,7 @@ export const freezeAgent = async (agentID, username) => {
     throw new Error("Invalid or already frozen agent!");
   agent.frozen = true;
   await agent.save();
+  logStatus(`Agent '${agent.uid}' frozen by '${username}'`);
   socketServer.emit("update_agent", agent);
   socketServer.emit("agent_console_output", {
     agentID: agentID.toString(),
@@ -159,6 +162,7 @@ export const unfreezeAgent = async (agentID, username) => {
     throw new Error("Invalid or already unfrozen agent!");
   agent.frozen = false;
   await agent.save();
+  logWarning(`Agent '${agent.uid}' unfrozen by '${username}'`);
   socketServer.emit("update_agent", agent);
   socketServer.emit("agent_console_output", {
     agentID: agentID.toString(),
@@ -180,6 +184,7 @@ export const deleteAgent = async (agentID, username) => {
   const data = await Agent.deleteOne({uid: agentID.toString()});
   if (data.deletedCount === 0)
     throw new Error("Invalid agent!");
+  logWarning(`Agent '${agentID}' deleted by '${username}'`);
   socketServer.emit("agent_deleted", {
     agentID: agentID.toString(),
     user: username

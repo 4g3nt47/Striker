@@ -25,6 +25,10 @@ export const addRedirector = async (url) => {
   url = url.toString();
   if (!(url.startsWith("http://") || url.startsWith("https://")))
     throw new Error("Unknown protocol. Only HTTP(s) are supported!");
+  while (url.endsWith("/"))
+    url = url.substr(0, url.length - 1).trim()
+  if (!url)
+    throw new Error("Invalid URL!");
   if (await Redirector.findOne({url}))
     throw new Error("Redirector already exists!");
   const rd = new Redirector({url});

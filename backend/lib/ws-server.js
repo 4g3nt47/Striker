@@ -10,6 +10,7 @@ import Agent, * as agentModel from '../models/agent.js';
 import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
 import Chat, * as chatModel from '../models/chat.js';
+import {logStatus, logWarning, logError} from '../models/log.js';
 import {output} from './utils.js';
 
 /**
@@ -245,8 +246,8 @@ export const setupWS = (httpServer) => {
       delete global.socketObjects[username];
       if (global.adminSocketObjects[username])
         delete global.adminSocketObjects[username];
-      output(`WS: User '${username}' has disconnect!`);
       socketServer.emit("new_teamchat_message", `***** User '${username}' has logged out! *****`);
+      output(`WS: User '${username}' has disconnect!`);
     });
 
   });

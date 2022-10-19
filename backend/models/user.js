@@ -7,6 +7,8 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import validator from 'validator';
+import {logStatus, logWarning, logError} from './log.js';
+
 
 // The collection schema.
 const userSchema = mongoose.Schema({
@@ -96,6 +98,7 @@ export const createUser = async (username, password) => {
   const user = new User(data);
   await user.setPassword(password);
   await user.save();
+  logStatus("User account created: " + user.username);
   global.adminWSEmit("new_user", data);
   return user;
 };
@@ -103,13 +106,15 @@ export const createUser = async (username, password) => {
 /**
  * Delete a user account.
  * @param {string} username - The target user's username.
+ * @param {string} deleter - The user requesting the action.
  * @return {object} The query result.
  */
-export const deleteUser = async (username) => {
+export const deleteUser = async (username, deleter) => {
 
   const data = await User.deleteOne({username: username.toString()});
   if (data.deletedCount == 0)
     throw new Error("Invalid user!");
+  logWarning(`User account '${username}' deleted by '${deleter}'`);
   global.adminWSEmit("user_deleted", username);
   return data;
 };
@@ -132,6 +137,7 @@ export const loginUser = async (username, password) => {
   user.lastSeen = Date.now();
   await user.save();
   user.loggedIn = true;
+  logStatus("User logged in: " + user.username);
   global.adminWSEmit("user_updated", {
     username,
     admin: false,
@@ -244,39 +250,48 @@ export const getUsers = async () => {
 /**
  * Grant admin privs to a user.
  * @param {string} username - The target user's username.
+ * @param {string} grantor - The user requesting the action.
  * @return {object} The query result.
  */
-export const grantAdmin = async (username) => {
+export const grantAdmin = async (username, grantor) => {
   
   const data = await User.updateOne({username: username.toString(), admin: false}, {admin: true});
-  if (data.modifiedCount > 0)
+  if (data.modifiedCount > 0){
+    logWarning(`Admin privileges granted to user '${username}' by '${grantor}'`);
     global.adminWSEmit("user_updated", await getUser(username.toString()));
+  }
   return data;
 };
 
 /**
  * Revoke admin privs of a user.
  * @param {string} username - The target user's username.
+ * @param {string} revoker - The user requesting the action.
  * @return {object} The query result.
  */
-export const revokeAdmin = async (username) => {
+export const revokeAdmin = async (username, revoker) => {
   
   const data = await User.updateOne({username: username.toString(), admin: true}, {admin: false});
-  if (data.modifiedCount > 0)
+  if (data.modifiedCount > 0){
+    logWarning(`Admin privileges for user '${username}' revoked by '${revoker}'`);
     global.adminWSEmit("user_updated", await getUser(username.toString()));
+  }
   return data;
 };
 
 /**
  * Suspend a user account and kill any active session it has.
  * @param {string} username - The target user's username.
+ * @param {string} suspender - The user requesting the action.
  * @return {object} The query result.
  */
-export const suspendUser = async (username) => {
+export const suspendUser = async (username, suspender) => {
   
   const data = await User.updateOne({username: username.toString(), suspended: false}, {suspended: true});
-  if (data.modifiedCount > 0)
+  if (data.modifiedCount > 0){
+    logWarning(`User account '${username}' suspended by '${suspender}'`);
     global.adminWSEmit("user_updated", await getUser(username.toString()));
+  }
   if (global.socketObjects[username])
     global.socketObjects[username].disconnect(true);
   return data;
@@ -285,13 +300,16 @@ export const suspendUser = async (username) => {
 /**
  * Activate a suspended user account.
  * @param {string} username - The target user's username.
+ * @param {string} activator - The user requesting the action.
  * @return {object} The query result.
  */
-export const activateUser = async (username) => {
+export const activateUser = async (username, activator) => {
   
   const data = await User.updateOne({username: username.toString(), suspended: true}, {suspended: false});
-  if (data.modifiedCount > 0)
+  if (data.modifiedCount > 0){
+    logWarning(`User account '${username}' activated by '${activator}'`);
     global.adminWSEmit("user_updated", await getUser(username.toString()));
+  }
   return data;
 };
 
@@ -299,9 +317,10 @@ export const activateUser = async (username) => {
  * Reset the password of a user.
  * @param {string} username - The target user's username.
  * @param {string} password - The new password.
+ * @param {string} resetter - The user requesting the action.
  * @return {object} The query result.
  */
-export const resetPassword = async (username, password) => {
+export const resetPassword = async (username, password, resetter) => {
 
   username = username.toString();
   password = password.toString();
@@ -309,5 +328,6 @@ export const resetPassword = async (username, password) => {
   if (!user)
     throw new Error("Invalid user!");
   await user.setPassword(password);
+  logWarning(`Account password for user '${username}' reset by '${resetter}'`);
   return await user.save();
 };

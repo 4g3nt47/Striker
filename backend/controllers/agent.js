@@ -12,6 +12,7 @@ import Key, * as keyModel from '../models/key.js';
 import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
 import Redirector, * as rdModel from '../models/redirector.js';
+import {logStatus, logWarning, logError} from '../models/log.js';
 
 // A generic error message for requests that got denied due to perm issues.
 const PERM_ERROR = {error: "Permission denied!"};
@@ -84,7 +85,7 @@ export const getAgent = (req, res) => {
 };
 
 /**
- * Create a new task. For users only.
+ * Create a new task. For authenticated users only.
  */
 export const createTask = (req, res) => {
 
@@ -176,7 +177,7 @@ export const freezeAgent = (req, res) => {
   if (req.session.loggedIn !== true)
     return res.status(403).json(PERM_ERROR);
   const agentID = req.params.agentID;
-  agentModel.freezeAgent(agentID).then(data => {
+  agentModel.freezeAgent(agentID, req.session.username).then(data => {
     return res.json({success: "Agent frozen!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -191,7 +192,7 @@ export const unfreezeAgent = (req, res) => {
   if (req.session.loggedIn !== true)
     return res.status(403).json(PERM_ERROR);
   const agentID = req.params.agentID;
-  agentModel.unfreezeAgent(agentID).then(data => {
+  agentModel.unfreezeAgent(agentID, req.session.username).then(data => {
     return res.json({success: "Agent unfrozen!"});
   }).catch(error => {
     return res.status(403).json({error: error.message});
@@ -297,6 +298,7 @@ export const uploadFile = (req, res) => {
       global.socketServer.emit("new_file", file);
       // Task agent to download the file if user is the one uploading.
       if (userUpload){
+        logStatus(`File '${uid}' uploaded by user '${req.session.username}' for agent '${agentID}'`)
         const task = {
           agentID: agentID.toString(),
           taskType: "upload",
@@ -306,7 +308,9 @@ export const uploadFile = (req, res) => {
           }
         }
         taskModel.createTask(req.session.username, task);
-      }      
+      }else{
+        logStatus(`File '${uid}' uploaded by agent '${agentID}'`);
+      }
       return res.json({success: "File uploaded!"});
     });
   }).catch(error => {
@@ -370,6 +374,7 @@ export const deleteFile = (req, res) => {
   const agentID = req.params.agentID;
   const fileID = req.params.fileID;
   fileModel.deleteFile(agentID, fileID).then(data => {
+    logWarning(`File '${fileID}' deleted by '${req.session.username}'`);
     global.socketServer.emit("file_deleted", fileID);
     return res.json({success: "File deleted!"});
   }).catch(error => {
