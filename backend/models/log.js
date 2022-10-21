@@ -74,5 +74,5 @@ export const logError = async (msg) => {
  * @return {object} An array of logs, with newer ones placed first.
  */
 export const getLogs = async (count) => {
-  return await Log.find({}, null, {limit: parseInt(count), sort:{date: -1}});
+  return await Log.find({}, null, {limit: parseInt(count), sort: {date: -1}});
 };

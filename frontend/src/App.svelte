@@ -194,6 +194,7 @@
     // Called when a new team chat message was created.
     socket.on('new_teamchat_message', (message) => {
       teamchatMessages = [...teamchatMessages, message];
+      teamchatMessages.splice(0, teamchatMessages.length - 250);
     });
 
     // Called when new user is created.
@@ -260,10 +261,8 @@
 
     // Called when a new event log is created.
     socket.on("new_log", (log) => {
-      
-      if (eventLogs.length >= 250)
-        eventLogs.splice(eventLogs.length() - 1, 1);
       eventLogs = [log, ...eventLogs];
+      eventLogs.splice(250);
     });
 
     // Handles custom errors.
@@ -272,8 +271,8 @@
     });
 
     // Handles server-side disconnection.
-    socket.on('disconnect', () => {
-      console.log("Web socket disconnected!");
+    socket.on('disconnect', (reason) => {
+      console.log("Web socket disconnected: " + reason);
     });
   };
 

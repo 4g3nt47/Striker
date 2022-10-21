@@ -12,6 +12,10 @@ const agentSchema = mongoose.Schema({
     type: String,
     required: true
   },
+  agentType: {
+    type: Number,
+    required: true
+  },
   delay: {
     type: Number,
     required: true,
@@ -69,7 +73,8 @@ export const createAgent = async (data) => {
   const uid = crypto.randomBytes(8).toString('hex');
   const agent = new Agent({
     uid,
-    delay: parseInt(data.delay !== undefined ? data.delay : global.AGENT_DELAY),
+    agentType: parseInt(data.type !== undefined ? data.type : 0),
+    delay: parseInt(data.delay !== undefined ? data.delay : 5),
     os: (data.os ? data.os.toString() : "unknown"),
     host: (data.host ? data.host.toString() : "unknown"),
     user: (data.user ? data.user.toString() : "unknown"),

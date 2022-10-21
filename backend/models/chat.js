@@ -10,13 +10,13 @@ const chatSchema = mongoose.Schema({
     type: String,
     required: true
   },
-  message: {
-    type: String,
-    required: true,
-  },
   date: {
     type: Number,
     required: true
+  },
+  message: {
+    type: String,
+    required: true,
   }
 });
 
@@ -49,9 +49,10 @@ export const createMessage = async (username, message) => {
 };
 
 /**
- * Get all messages.
+ * Get teamchat messages.
+ * @param {string} count - Number of messages to fetch.
  * @return {object} An array of messages.
  */
-export const getMessages = async () => {
-  return await Chat.find({});
+export const getMessages = async (count) => {
+  return ((await Chat.find({}, null, {limit: parseInt(count), sort: {date: -1}})).reverse());
 };

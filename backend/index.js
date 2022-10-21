@@ -27,7 +27,6 @@ const PORT = process.env.PORT || 3000;
 const SECRET = process.env.SECRET;
 global.ORIGIN_URL = process.env.ORIGIN_URL;
 global.REGISTRATION_KEY = process.env.REGISTRATION_KEY;
-global.AGENT_DELAY = parseInt(process.env.AGENT_DELAY);
 global.MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE);
 global.UPLOAD_LOCATION = process.env.UPLOAD_LOCATION;
 if (!global.UPLOAD_LOCATION.endsWith("/"))

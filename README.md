@@ -85,7 +85,6 @@ PORT=<port to listen on>
 SECRET=<random string to use for signing session cookies and encrypting session data>
 ORIGIN_URL=<full URL of the server you will be hosting the frontend at. Used to setup CORS>
 REGISTRATION_KEY=<random string to use for authentication during signup>
-AGENT_DELAY=<default agent callback delay, in seconds. Rarely used>
 MAX_UPLOAD_SIZE=<max file upload size, in bytes>
 UPLOAD_LOCATION=<directory to store uploaded files to>
 ```

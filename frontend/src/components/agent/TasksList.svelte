@@ -27,6 +27,7 @@
   export let showTaskModal = false;
   export let selectedTask = null;
   export let selectedTaskData = "";
+  export let killTaskBtn = null;
 
   const dispatch = createEventDispatcher();
 
@@ -37,6 +38,7 @@
 
   // Release the selected task. Called when the displayed modal is closed.
   const releaseTask = () => {
+    killTaskBtn = null;
     dispatch("releaseTask");    
   };
 
@@ -45,10 +47,22 @@
 
     if (!confirm(`Delete task '${selectedTask.uid}'?`))
       return;
-    socket.emit("delete_task", {
+    socket.emit("agent_console_input", {
       agentID: selectedTask.agentID,
-      taskID: selectedTask.uid
+      input: "delete task " + selectedTask.uid
     });
+  };
+
+  // Called when the kill task button of selected task is clicked.
+  const killTask = () => {
+
+    if (!confirm(`Kill task '${selectedTask.uid}'?`))
+      return;
+    socket.emit("agent_console_input", {
+      agentID: selectedTask.agentID,
+      input: "kill " + selectedTask.uid
+    });
+    killTaskBtn.disabled = true;
   };
 
 </script>
@@ -75,7 +89,7 @@
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Received</th>
           <td class="pl-2">{selectedTask.received ? new Date(selectedTask.dateReceived).toLocaleString() : "no"}</td>
         </tr>
-        {#if (selectedTask.completed)}
+        {#if (selectedTask && selectedTask.completed)}
           <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Completed</th>
             <td class="pl-2">{`${new Date(selectedTask.dateCompleted).toLocaleString()} (${((selectedTask.dateCompleted - selectedTask.dateReceived) / 1000).toFixed(2)} seconds)`}</td>
@@ -87,7 +101,7 @@
       <div class="no-scrollbar max-h-80 overflow-y-auto p-1 text-white whitespace-pre-wrap break-all bg-gray-900 border-2 border-black">
         {selectedTaskData}
       </div>
-      {#if (selectedTask.completed)}
+      {#if (selectedTask && selectedTask.completed)}
         <p>Task Result:</p>
         <div class="no-scrollbar max-h-80 overflow-y-auto break-all whitespace-pre-wrap p-1 text-white bg-gray-900 border-2 border-black">
           {selectedTask.result.length > 0 ? selectedTask.result : "[Task returned no result]"}
@@ -95,9 +109,16 @@
       {/if}
     </div>
     <!-- Task management options -->
-    <div class="w-1/3 mt-2 mx-auto">
-      <Button type="danger" on:click={deleteTask}>Delete Task</Button>
-    </div>
+    {#if (selectedTask && selectedTask.received && (!selectedTask.completed))}
+      <div class="w-1/2 mt-2 mx-auto grid grid-cols-2 gap-2">
+        <Button type="danger" bind:btn={killTaskBtn} on:click={killTask}>Kill Task</Button>
+        <Button type="danger" on:click={deleteTask}>Delete Task</Button>        
+      </div>
+    {:else}
+      <div class="w-1/3 mt-2 mx-auto">
+        <Button type="danger" on:click={deleteTask}>Delete Task</Button>
+      </div>
+    {/if}
   </Modal>
 {/if}
 

