@@ -81,13 +81,18 @@ $ head -c 100 /dev/urandom | sha256sum
 
 ```text
 DB_URL=<your MongoDB connection URL>
-PORT=<port to listen on>
+HOST=<host to listen on (default: 127.0.0.1)>
+PORT=<port to listen on (default: 3000)>
 SECRET=<random string to use for signing session cookies and encrypting session data>
 ORIGIN_URL=<full URL of the server you will be hosting the frontend at. Used to setup CORS>
 REGISTRATION_KEY=<random string to use for authentication during signup>
 MAX_UPLOAD_SIZE=<max file upload size, in bytes>
-UPLOAD_LOCATION=<directory to store uploaded files to>
+UPLOAD_LOCATION=<directory to store uploaded files to (default: static/)>
+SSL_KEY=<your SSL key file (optional)>
+SSL_CERT=<your SSL cert file (optional)>
 ```
+
+Note that `SSL_KEY` and `SSL_CERT` are optional. If any is not defined, a plain HTTP server will be created. This helps avoid needless overhead when running the server behind an SSL-enabled reverse proxy on the same host.
 
 6. Start the server;
 
@@ -163,16 +168,16 @@ You can now login :)
 
 ### 3. The C2 Redirector
 
-This is located in the directory `redirector/`. It is a simple dumb pipe redirector for routing traffic from one endpoint to another. Except for local testing, you should never use this alone as a redirector. It should only be used between a HTTPs enabled reverse proxy like Nginx to forward traffic to the C2 server over plain HTTP, or to another dumb pipe redirector like socat.
-
 **A) Dumb Pipe Redirection**
 
-The following example listens on port `3000` on all interfaces and forward to `c2.example.org` on port `80`;
+A dump pipe redirector written for *Striker* is available at `redirector/redirector.py`. Obviously, this will only work for plain HTTP traffic, or for HTTPS when SSL verification is disabled (you can do this by enabling the `INSECURE_SSL` macro in the C agent).
+
+The following example listens on port `443` on all interfaces and forward to `c2.example.org` on port `443`;
 
 ```bash
 $ cd redirector
-$ ./redirector.py 0.0.0.0:3000 c2.example.org:80
-[*] Starting redirector on 0.0.0.0:3000...
+$ ./redirector.py 0.0.0.0:443 c2.example.org:443
+[*] Starting redirector on 0.0.0.0:443...
 [+] Listening for connections...
 ```
 

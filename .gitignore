@@ -1,6 +1,7 @@
 backend/.env
 backend/node_modules/
 backend/static/
+backend/ssl/
 
 frontend/.env
 frontend/node_modules/

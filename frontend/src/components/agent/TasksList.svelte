@@ -5,6 +5,7 @@
    * @author Umar Abdul
    * Props:
    *          socket - The WS object.
+   *          agent - The agent that owns the tasks.
    *          tasks - An array of tasks.
    *          showTaskModal - Controls modal visibility.
    *          selectedTask - The selected task.
@@ -23,6 +24,7 @@
   import Modal from '../Modal.svelte';
 
   export let socket = null;
+  export let agent = {};
   export let tasks = [];
   export let showTaskModal = false;
   export let selectedTask = null;
@@ -48,7 +50,7 @@
     if (!confirm(`Delete task '${selectedTask.uid}'?`))
       return;
     socket.emit("agent_console_input", {
-      agentID: selectedTask.agentID,
+      agent,
       input: "delete task " + selectedTask.uid
     });
   };
@@ -59,7 +61,7 @@
     if (!confirm(`Kill task '${selectedTask.uid}'?`))
       return;
     socket.emit("agent_console_input", {
-      agentID: selectedTask.agentID,
+      agent,
       input: "kill " + selectedTask.uid
     });
     killTaskBtn.disabled = true;

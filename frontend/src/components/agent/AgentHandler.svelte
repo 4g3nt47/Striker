@@ -176,7 +176,7 @@
       dispatch("clearConsole", agent.uid);
     }else{
       socket.emit("agent_console_input", {
-        agentID: agent.uid,
+        agent,
         input: consoleCommand
       });
     }
@@ -273,7 +273,7 @@
       </div>
       <ErrorMsg error={infoPageError}/>
     {:else if (currTab === "Tasks")}
-      <TasksList {socket} {tasks} {selectedTask} {showTaskModal} {selectedTaskData} on:selectTask={selectTask} on:releaseTask={releaseTask}/>
+      <TasksList {socket} {agent} {tasks} {selectedTask} {showTaskModal} {selectedTaskData} on:selectTask={selectTask} on:releaseTask={releaseTask}/>
     {:else if (currTab === "Console")}
       <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
       <input id="console-input" class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec} autocomplete="off"> 

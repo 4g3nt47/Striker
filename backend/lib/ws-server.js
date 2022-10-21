@@ -70,25 +70,24 @@ export const setupWS = (httpServer) => {
     socketObjects[username] = client;
     output(`WS: New connection for '${username}': ${client.id}`);
 
-    // Console help page.
-    const helpPage = "  COMMAND                               FUNCTION\n"+
-                     "  -------                               --------\n\n"+
-                     "  abort                                 Task agent to quit\n"+
-                     "  clear                                 Clear console output\n"+
-                     "  cd <dir>                              Change working directory\n"+
-                     "  delay <secs>                          Update agent callback delay\n"+
-                     "  delete agent                          Delete agent\n"+
-                     "  delete task <id>                      Delete a task\n"+
-                     "  download <file>                       Download a file from the agent\n"+
-                     "  freeze                                Freeze/stop agent from receiving tasks\n"+
-                     "  help/?                                You are looking at it :p\n"+
-                     "  kill <id>                             Task agent to kill a running task\n"+
-                     "  tasks                                 List running tasks\n"+
-                     "  tunnel <lhost:lport> <rhost:rport>    Start a TCP tunnel\n"+
-                     "  unfreeze                              Unfreeze agent\n"+
-                     "  keymon <secs>                         Run a keylogger\n"+
-                     "  system <cmd>                          Run a shell command on the agent\n"+
-                     "  writedir <dir>                        Change the write directory of an agent\n";
+    // For building help page. Following commands are supported by all agents.
+    const helpData = {
+      "abort": "Task agent to quit",
+      "clear": "Clear console output",
+      "cd <dir>": "Change working directory",
+      "delay <secs>": "Update agent callback delay",
+      "delete agent <id>": "Delete an agent",
+      "delete task <id>": "Delete a task",
+      "download <file>": "Download a file from agent",
+      "freeze": "Freeze the agent (don't send tasks)",
+      "unfreeze": "Unfreeze the agent",
+      "help/?": "You are looking at it :)",
+      "kill <id>": "Kill a running task",
+      "tasks": "List running tasks",
+      "tunnel <lhost>:<lport> <rhost>:<rport>": "Start a TCP tunnel",
+      "system <cmd>": "Run a shell command",
+      "writedir <dir>": "Change agent's write directory"
+    }
 
     /**
      * For processing raw agent console inputs from users. 
@@ -98,12 +97,27 @@ export const setupWS = (httpServer) => {
     client.on("agent_console_input", async (data) => {
 
       try{
-        const agentID = data.agentID.toString();
+        const agent = data.agent;
+        const agentID = agent.uid;
         const input = data.input.toString().trim();
         client.emit("agent_console_output", {
           agentID, msg: `${username} > ${input}`
         });
         if (input === "help" || input === "?"){
+          const agentHelp = {...helpData};
+          if (agent.agentType === 0){ // The main C agent
+            agentHelp["keymon <secs>"] = "Run a keylogger for given seconds";
+          }
+          let cmds = Object.keys(agentHelp).sort();
+          let maxLen = 0;
+          for (let cmd of cmds){
+            if (cmd.length > maxLen)
+              maxLen = cmd.length;
+          }
+          let helpPage = `  ${"COMMAND".padEnd(maxLen, " ")}  ${"FUNCTION"}\n`;
+          helpPage += `  ${"".padEnd(maxLen, "-")}  ${"--------------------"}\n`;
+          for (let cmd of cmds)
+            helpPage += `  ${cmd.padEnd(maxLen, " ")}  ${agentHelp[cmd]}\n`
           client.emit("agent_console_output", {
             agentID, msg: helpPage
           });

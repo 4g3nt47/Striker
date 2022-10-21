@@ -6,6 +6,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import fs from 'fs';
+import https from 'https';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -23,12 +25,13 @@ import logRouter from './routes/log.js';
 
 // Setup global configs.
 const DB_URL = process.env.DB_URL;
+const HOST = process.env.HOST || "127.0.0.1";
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.SECRET;
 global.ORIGIN_URL = process.env.ORIGIN_URL;
 global.REGISTRATION_KEY = process.env.REGISTRATION_KEY;
 global.MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE);
-global.UPLOAD_LOCATION = process.env.UPLOAD_LOCATION;
+global.UPLOAD_LOCATION = process.env.UPLOAD_LOCATION || "static/";
 if (!global.UPLOAD_LOCATION.endsWith("/"))
   global.UPLOAD_LOCATION += "/";
 
@@ -100,13 +103,39 @@ app.use((error, req, res, next) => {
   return res.status(500).json({error: error.message});
 });
 
+// Load SSL keys, if defined.
+let sslKey = null, sslCert = null;
+if (process.env.SSL_KEY && process.env.SSL_CERT){
+  output("Loading SSL key and cert...");
+  try{
+    sslKey = fs.readFileSync(process.env.SSL_KEY);
+    sslCert = fs.readFileSync(process.env.SSL_CERT);      
+  }catch(error){
+    output(`Error: ${error.message}`);
+    process.exit(1);
+  }
+}
+
 // Start the API server
 output("Connecting to backend database...");
 mongoose.connect(DB_URL).then(() => {
   
-  output("Starting HTTP server...");
-  const httpServer = app.listen(PORT, '127.0.0.1', () => {
-    output("Server started on port: " + PORT);
-    setupWS(httpServer);
-  });
+  output(`Starting web server on ${HOST}:${PORT}`);
+  if (process.env.SSL_KEY && process.env.SSL_CERT){
+    const httpsServer = https.createServer({
+      key: sslKey,
+      cert: sslCert
+    }, app);
+    httpsServer.listen(PORT, HOST, () => {
+      output("Setting up WS server...");
+      setupWS(httpsServer);
+      output("Server started successfully!");
+    });
+  }else{
+    const httpServer = app.listen(PORT, HOST, () => {
+      output("Setting up WS server...");
+      setupWS(httpServer);
+      output("Server started successfully!");
+    });    
+  }
 });
