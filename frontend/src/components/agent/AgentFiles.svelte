@@ -16,6 +16,7 @@
   import SuccessMsg from '../SuccessMsg.svelte';
   import ErrorMsg from '../ErrorMsg.svelte';
   import Modal from '../Modal.svelte';
+  import {formatDate} from '../../lib/striker-utils.js';
 
   export let session = {};
   export let socket = null;
@@ -191,7 +192,7 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Created</th>
-          <td class="pl-2">{new Date(selectedFile.dateCreated).toLocaleString()}</td>
+          <td class="pl-2">{formatDate(selectedFile.dateCreated)}</td>
         </tr>
       </table>
       <div class="w-full my-3 grid grid-cols-3 gap-3">
@@ -238,7 +239,7 @@
           {#each files as file, index}
             <tr class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" on:click={() => selectFile(file)}>
               <td class="pl-2">{file.uid.substr(0, 12) + '...'}</td>
-              <td class="pl-2">{new Date(file.dateCreated).toLocaleString()}</td>
+              <td class="pl-2">{formatDate(file.dateCreated)}</td>
               <td class="pl-2">{file.name}</td>
             </tr>
           {/each}

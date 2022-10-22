@@ -22,6 +22,7 @@
   import Button from '../Button.svelte';
   import ErrorMsg from '../ErrorMsg.svelte';
   import Modal from '../Modal.svelte';
+  import {formatDate} from '../../lib/striker-utils.js';
 
   export let socket = null;
   export let agent = {};
@@ -89,12 +90,12 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Received</th>
-          <td class="pl-2">{selectedTask.received ? new Date(selectedTask.dateReceived).toLocaleString() : "no"}</td>
+          <td class="pl-2">{selectedTask.received ? formatDate(selectedTask.dateReceived) : "no"}</td>
         </tr>
         {#if (selectedTask && selectedTask.completed)}
           <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Completed</th>
-            <td class="pl-2">{`${new Date(selectedTask.dateCompleted).toLocaleString()} (${((selectedTask.dateCompleted - selectedTask.dateReceived) / 1000).toFixed(2)} seconds)`}</td>
+            <td class="pl-2">{`${formatDate(selectedTask.dateCompleted)} (${((selectedTask.dateCompleted - selectedTask.dateReceived) / 1000).toFixed(2)} seconds)`}</td>
           </tr>
         {/if}
       </table>

@@ -290,9 +290,10 @@ export const uploadFile = (req, res) => {
       });
       await file.save();
       delete orgFilenames[uid];
-      let msg = userUpload ? (global.serverPrompt + `File received from user '${req.session.username}': ${uid} - ${orgName}`) : (global.serverPrompt + `File received from agent: ${uid} - ${orgName}`);
+      let msg = userUpload ? (`File received from user '${req.session.username}': ${uid} - ${orgName}`) : (`File received from agent: ${uid} - ${orgName}`);
       global.socketServer.emit("agent_console_output", {
         agentID: agentID.toString(),
+        prompt: global.serverPrompt,
         msg
       });
       global.socketServer.emit("new_file", file);

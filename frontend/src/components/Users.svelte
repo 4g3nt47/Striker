@@ -21,6 +21,7 @@
   import ErrorMsg from './ErrorMsg.svelte';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
+  import {formatDate} from '../lib/striker-utils.js';
 
   export let session = {};
   export let users = [];
@@ -140,11 +141,11 @@
           </tr>
           <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Created</th>
-            <td class="pl-2">{new Date(selectedUser.creationDate).toLocaleString()}</td>
+            <td class="pl-2">{formatDate(selectedUser.creationDate)}</td>
           </tr>
           <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Last Login</th>
-            <td class="pl-2">{new Date(selectedUser.lastSeen).toLocaleString()}</td>
+            <td class="pl-2">{formatDate(selectedUser.lastSeen)}</td>
           </tr>
         </table>
         <div class="mt-2 w-full">
@@ -170,8 +171,8 @@
     {#each users as user, index}
       <tr transition:slide|local={{duration: 200}} class={"cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" + (user.suspended ? " text-cyan-700" : (user.loggedIn ? " text-green-900" : ""))} on:click={() => selectUser(index)}>
         <td class="pl-2">{user.username}</td>
-        <td class="pl-2">{new Date(user.creationDate).toLocaleString()}</td>
-        <td class="pl-2">{new Date(user.lastSeen).toLocaleString()}</td>
+        <td class="pl-2">{formatDate(user.creationDate)}</td>
+        <td class="pl-2">{formatDate(user.lastSeen)}</td>
         <td class={"pl-2 font-bold" + (user.admin ? " text-red-500" : "")}>{user.admin ? "Yes" : "No"}</td>
       </tr>
     {/each}

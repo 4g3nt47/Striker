@@ -19,6 +19,7 @@
   import TeamChat from './components/TeamChat.svelte';
   import AuthKeys from './components/AuthKeys.svelte';
   import Redirectors from './components/Redirectors.svelte';
+  import {formatDate} from './lib/striker-utils.js';
 
 
   // Create a new session tracker.
@@ -188,7 +189,7 @@
 
     // For writing some text to the console of an agent.
     socket.on('agent_console_output', (data) => {
-      updateConsoleMessage(data.agentID, data.msg);
+      updateConsoleMessage(data.agentID, data);
     });
 
     // Called when a new team chat message was created.
@@ -432,14 +433,14 @@
   };
 
   // Update the console message of a agent.
-  const updateConsoleMessage = (agentID, msg) => {
+  const updateConsoleMessage = (agentID, data) => {
 
     // Remove trailing newlines.
-    msg = msg.replace(/\r\n+$/, "");
-    msg = msg.replace(/\n+$/, "");
+    data.msg = data.msg.replace(/\r\n+$/, "");
+    data.msg = data.msg.replace(/\n+$/, "");
     if (!(agentID in consoleMsgs))
       consoleMsgs[agentID] = [];
-    consoleMsgs[agentID] = [...consoleMsgs[agentID], msg];
+    consoleMsgs[agentID] = [...consoleMsgs[agentID], data];
   };
 
   /**
@@ -463,6 +464,11 @@
   // Handles the `sendMessage` event created by TeamChat.svelte
   const sendTeamchatMessage = (e) => {
     socket.emit("send_teamchat_message", e.detail);
+  };
+
+  // Handles the `clearTeamchatMessages` event created by TeamChat.svelte
+  const clearTeamchatMessages = () => {
+    teamchatMessages = [];
   };
 
   // Handles the `selectUser` event created by Users.svelte
@@ -562,7 +568,7 @@
         {:else if (session.page === "keys")}
           <AuthKeys {session} {authKeys} {selectedAuthKey} {showSelectedKeyModal} on:selectAuthKey={selectAuthKey} on:releaseAuthKey={releaseAuthKey}/>
         {:else if (session.page === "chat")}
-          <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage}/>
+          <TeamChat messages={teamchatMessages} on:sendMessage={sendTeamchatMessage} on:clearMessages={clearTeamchatMessages}/>
         {:else if (session.page === "users")}
           <Users {session} {users} {selectedUser} {showUserModal} on:selectUser={selectUser} on:releaseUser={releaseUser}/>
         {:else if (session.page === "redirectors")}
@@ -574,15 +580,15 @@
             {#each eventLogs as log}
               {#if (log.logType === 0)}
                 <div transition:slide|local={{duration: 200}} class="font-mono bg-green-500 mt-2 py-1 pl-2 bg-opacity-20 border-l-4 border-green-800">
-                  {new Date(log.date).toLocaleString()}:  {log.message}
+                  {formatDate(log.date)}:  {log.message}
                 </div>
               {:else if (log.logType === 1)}
                 <div transition:slide|local={{duration: 200}} class="font-mono bg-yellow-500 mt-2 py-1 pl-2 bg-opacity-20 border-l-4 border-yellow-800">
-                  {new Date(log.date).toLocaleString()}:  {log.message}
+                  {formatDate(log.date)}:  {log.message}
                 </div>
               {:else}
                 <div transition:slide|local={{duration: 200}} class="font-mono bg-red-500 mt-2 py-1 pl-2 bg-opacity-20 border-l-4 border-red-800">
-                  {new Date(log.date).toLocaleString()}:  {log.message}
+                  {formatDate(log.date)}:  {log.message}
                 </div>
               {/if}
             {/each}

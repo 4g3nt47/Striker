@@ -15,6 +15,7 @@
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
   import ErrorMsg from '../ErrorMsg.svelte';
+  import {formatDate} from '../../lib/striker-utils.js';
 
   export let agents = [];
   export let tasks = {};
@@ -44,7 +45,7 @@
         <td class="pl-2">{agent.os}</td>
         <td class="pl-2">{`${agent.user}@${agent.host}`}</td>
         <td class="pl-2">{(tasks[agent.uid] === undefined ? 0 : tasks[agent.uid].length)}</td>
-        <td class="pl-2">{new Date(agent.lastSeen).toLocaleString()}</td>
+        <td class="pl-2">{formatDate(agent.lastSeen)}</td>
       </tr>
     {/each}
   </table>

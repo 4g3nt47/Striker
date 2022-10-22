@@ -37,7 +37,7 @@ export const loginUser = (req, res) => {
   model.loginUser(req.body.username, req.body.password).then(async (user) => {
     model.setupSession(req.session, user);
     const token = await model.createToken(user.username);
-    global.socketServer.emit("new_teamchat_message", `***** User '${req.session.username}' has logged in! *****`)
+    global.socketServer.emit("new_teamchat_message", {message: `***** User '${req.session.username}' has logged in! *****`});
     return res.json({
       username: user.username,
       admin: user.admin,

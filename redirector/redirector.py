@@ -5,7 +5,7 @@
 #                                                                     Author: Umar Abdul
 #---------------------------------------------------------------------------------------
 
-import sys, socket, threading
+import sys, os, socket, threading
 
 class Redirector:
 
@@ -83,7 +83,7 @@ class Redirector:
 
 if __name__ == '__main__':
   if len(sys.argv) < 3:
-    print("[-] Usage: %s <lhost:lport> <rhost:rport>" %(sys.argv[0]))
+    print("[-] Usage: %s <lhost:lport> <rhost:rport>" %(os.path.basename(sys.argv[0])))
     exit(1)
   lhost = sys.argv[1].split(":")[0]
   lport = int(sys.argv[1].split(":")[1])

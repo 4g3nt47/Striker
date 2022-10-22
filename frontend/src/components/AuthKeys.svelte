@@ -21,6 +21,7 @@
   import ErrorMsg from './ErrorMsg.svelte';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
+  import {formatDate} from '../lib/striker-utils.js';
 
   export let session = {};
   export let authKeys = [];
@@ -111,7 +112,7 @@
       </div>
       <label for="key-type">Key Type:</label>
       <select id="key-type" class="mb-5 inline-block w-56" bind:value={inputKeyType}>
-        <option value=0>one time</option>
+        <option value=0>volatile</option>
         <option value=1>static</option>
       </select>
       <Button btnType="submit">Add Key</Button>
@@ -131,7 +132,7 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Key Type</th>
-          <td class="pl-2">{selectedAuthKey.keyType === 0 ? "one time" : "static"}</td>
+          <td class="pl-2">{selectedAuthKey.keyType === 0 ? "volatile" : "static"}</td>
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Creator</th>
@@ -143,7 +144,7 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Created</th>
-          <td class="pl-2">{new Date(selectedAuthKey.creationDate).toLocaleString()}</td>
+          <td class="pl-2">{formatDate(selectedAuthKey.creationDate)}</td>
         </tr>
       </table>
       <div class="w-1/2 mt-5 mx-auto">
@@ -170,10 +171,10 @@
         </tr>
         {#each authKeys as key, index}
           <tr transition:slide|local={{duration: 200}} class="cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" on:click={() => selectAuthKey(index)}>
-            <td class="pl-2">{key.keyType === 0 ? "one time" : "static"}</td>
+            <td class="pl-2">{key.keyType === 0 ? "volatile" : "static"}</td>
             <td class="pl-2">{key.key}</td>
             <td class="pl-3">{key.useCount}</td>
-            <td class="pl-2">{new Date(key.creationDate).toLocaleString()}</td>
+            <td class="pl-2">{formatDate(key.creationDate)}</td>
           </tr>
         {/each}
       </table>

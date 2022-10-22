@@ -30,7 +30,7 @@ export const setupWS = (httpServer) => {
 
   global.socketObjects = {}; // Maps usernames to connected socket objects.
   global.adminSocketObjects = {}; // For admin users only.
-  global.serverPrompt = "[StrikerC2] > "; // The console prompt to use for server output.
+  global.serverPrompt = "StrikerC2"; // The console prompt to use for server output.
   const users = {}; // Maps connected socket IDs to usernames.
 
   /**
@@ -101,7 +101,7 @@ export const setupWS = (httpServer) => {
         const agentID = agent.uid;
         const input = data.input.toString().trim();
         client.emit("agent_console_output", {
-          agentID, msg: `${username} > ${input}`
+          agentID, prompt: username, msg: input
         });
         if (input === "help" || input === "?"){
           const agentHelp = {...helpData};
@@ -173,7 +173,8 @@ export const setupWS = (httpServer) => {
           if (isNaN(delay)){
             client.emit("agent_console_output", {
               agentID,
-              msg: serverPrompt + "Invalid callback delay: " + delay
+              prompt: serverPrompt,
+              msg: "Invalid callback delay: " + delay
             });
           }else{
             delay = parseInt(delay);
@@ -247,7 +248,8 @@ export const setupWS = (httpServer) => {
         }else{ // Unknown query
           client.emit("agent_console_output", {
             agentID,
-            msg: serverPrompt + "Unknown command: " + input
+            prompt: serverPrompt,
+            msg: "Unknown command: " + input
           });
         }
       }catch(error){
@@ -273,7 +275,7 @@ export const setupWS = (httpServer) => {
         let output = "";
         for (let user of users)
           output += `=>  ${user}\n`;
-        client.emit("new_teamchat_message", output.trim());
+        client.emit("new_teamchat_message", {message: output.trim()});
       }else{
         chatModel.createMessage(username, message).catch(error => {
         });
@@ -286,7 +288,7 @@ export const setupWS = (httpServer) => {
       delete global.socketObjects[username];
       if (global.adminSocketObjects[username])
         delete global.adminSocketObjects[username];
-      socketServer.emit("new_teamchat_message", `***** User '${username}' has logged out! *****`);
+      socketServer.emit("new_teamchat_message", {message: `***** User '${username}' has logged out! *****`});
       output(`WS: User '${username}' has disconnect!`);
     });
 

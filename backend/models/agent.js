@@ -86,7 +86,7 @@ export const createAgent = async (data) => {
   await agent.save();
   logStatus(`New agent called home: '${agent.uid}'`);
   global.socketServer.emit("new_agent", agent);
-  global.socketServer.emit("new_teamchat_message", `***** New agent called home: '${agent.uid}' *****`);
+  global.socketServer.emit("new_teamchat_message", {message: `***** New agent called home: '${agent.uid}' *****`});
   const config = {
     uid: agent.uid
   };
@@ -148,7 +148,8 @@ export const freezeAgent = async (agentID, username) => {
   socketServer.emit("update_agent", agent);
   socketServer.emit("agent_console_output", {
     agentID: agentID.toString(),
-    msg: global.serverPrompt + `Agent frozen by '${username}'`
+    prompt: global.serverPrompt,
+    msg: `Agent frozen by '${username}'`
   });
   return agent;
 };
@@ -171,7 +172,8 @@ export const unfreezeAgent = async (agentID, username) => {
   socketServer.emit("update_agent", agent);
   socketServer.emit("agent_console_output", {
     agentID: agentID.toString(),
-    msg: global.serverPrompt + `Agent unfrozen by '${username}'`
+    prompt: global.serverPrompt,
+    msg: `Agent unfrozen by '${username}'`
   });
   return agent;
 };

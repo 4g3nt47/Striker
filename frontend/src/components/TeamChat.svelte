@@ -11,11 +11,11 @@
    */
 
   import {onMount, createEventDispatcher} from 'svelte';
+  import {formatDate} from '../lib/striker-utils.js';
 
   export let messages = [];
 
   const dispatch = createEventDispatcher();
-  let chatMessages = "";
   let msgCount = 0;
   let input = "";
 
@@ -24,16 +24,6 @@
     if (messages.length === msgCount)
       return;
     msgCount = messages.length;
-    chatMessages = "";
-    for (let i = 0; i < msgCount; i++){
-      let message = messages[i];
-      if (typeof(message) === 'string'){
-        chatMessages += message + (i == (msgCount - 1) ? "" : "\n");
-      }else{
-        let date = new Date(messages[i].date);
-        chatMessages += `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')} - ${date.toLocaleTimeString()} ${messages[i].username.padStart(10, " ")}:  ${messages[i].message + (i == (msgCount - 1) ? "" : "\n")}`;
-      }
-    }
     scrollToBottom();
   };
 
@@ -51,7 +41,7 @@
     let output = document.getElementById('messages');
     let wrapper = document.getElementById('wrapper');
     if (output && wrapper)
-      output.rows = wrapper.offsetHeight / 32;
+      output.style['height'] = `${wrapper.offsetHeight - 40}px`;
   };
 
   const inputKeyup = (e) => {
@@ -60,19 +50,33 @@
       return;
     if (!input)
       return;
-    dispatch("sendMessage", input);
+    if (input === "/clear")
+      dispatch("clearMessages");
+    else
+      dispatch("sendMessage", input);
     input = "";
   };
 
-  onMount(() => document.getElementById('input').focus());
-
   $: updateChatMessages(messages);
-  window.onresize = updateChatSize;
-  setTimeout(updateChatSize, 70);
+
+  onMount(() => {
+    document.getElementById('input').focus();
+    updateChatSize();
+    window.onresize = updateChatSize;
+  });
 
 </script>
 
-<div id="wrapper" class="h-full font-mono text-md">
-  <textarea id="messages" class="no-scrollbar bg-gray-900 text-white" bind:value={chatMessages} readonly></textarea>
+<div id="wrapper" class="max-h-full min-h-full font-mono text-md">
+  <!-- <textarea id="messages" class="no-scrollbar bg-gray-900 text-white" bind:value={chatMessages} readonly></textarea> -->
+  <div id="messages" class="p-1 no-scrollbar overflow-y-auto bg-gray-900 whitespace-pre-wrap break-all text-white">
+    {#each messages as msg}
+      {#if (msg.username && msg.date)}
+        <p><span class="text-yellow-400">{formatDate(msg.date)}</span><span class="text-green-400">{msg.username.padStart(12, " ")}</span><span class="text-yellow-400">{ " > "}</span>{msg.message}</p>
+      {:else}
+        <p class="text-green-400">{msg.message}</p>
+      {/if}
+    {/each}
+  </div>
   <input id="input" class="bg-gray-300" type="text" bind:value={input} autocomplete="off" on:keyup={inputKeyup} placeholder="Message...">
 </div>

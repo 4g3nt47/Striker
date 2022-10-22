@@ -93,7 +93,8 @@ export const createTask = async (owner, data, onComplete) => {
   socketServer.emit("new_task", task);
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
-    msg: global.serverPrompt + `Task '${task.uid}' (${taskType}) created by '${task.owner}'`
+    prompt: global.serverPrompt,
+    msg: `Task '${task.uid}' (${taskType}) created by '${task.owner}'`
   });
 
   return task;
@@ -115,7 +116,8 @@ export const deleteTask = async (agentID, taskID, username) => {
   if (data.deletedCount === 0){
     socketServer.emit("agent_console_output", {
       agentID,
-      msg: global.serverPrompt + `Invalid task: ${taskID}`
+      prompt: global.serverPrompt,
+      msg:`Invalid task: ${taskID}`
     });
     throw new Error("Invalid task!");
   }
@@ -127,7 +129,8 @@ export const deleteTask = async (agentID, taskID, username) => {
   });
   socketServer.emit("agent_console_output", {
     agentID,
-    msg: global.serverPrompt + `Task '${taskID}' deleted by '${username}'`
+    prompt: global.serverPrompt,
+    msg: `Task '${taskID}' deleted by '${username}'`
   });
   return data;
 };
@@ -203,7 +206,8 @@ export const markReceived = async (taskID) => {
   socketServer.emit("update_task", task);
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
-    msg: global.serverPrompt + `Task '${task.uid}' (${task.taskType}) received by agent`
+    prompt: global.serverPrompt,
+    msg: `Task '${task.uid}' (${task.taskType}) received by agent`
   });
   return task;
 };
@@ -363,11 +367,12 @@ export const setResult = async (agentID, data) => {
   await agent.save();
   socketServer.emit("update_task", task);
   socketServer.emit("update_agent", agent);
-  let message = global.serverPrompt + `Task '${task.uid}' (${task.taskType}) completed`
+  let message = `Task '${task.uid}' (${task.taskType}) completed`
   if (task.result.length > 0)
     message += `. ${task.result.length} bytes received;\n${task.result}`
   socketServer.emit("agent_console_output", {
     agentID: task.agentID,
+    prompt: global.serverPrompt,
     msg: message
   });
   logStatus(`Task '${task.uid}' completed!`);

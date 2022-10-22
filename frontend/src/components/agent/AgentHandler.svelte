@@ -13,7 +13,7 @@
    *        clearConsole - Notify parent to clear the console messages `consoleMsgs` of the agent
    */
 
-  import {createEventDispatcher} from 'svelte';
+  import {onMount, createEventDispatcher} from 'svelte';
   import {scale, slide, fade} from 'svelte/transition';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
@@ -21,6 +21,7 @@
   import Button from '../Button.svelte';
   import ErrorMsg from '../ErrorMsg.svelte';
   import AgentFiles from './AgentFiles.svelte';
+  import {formatDate} from '../../lib/striker-utils.js';
 
   export let session = {};
   export let socket = null;
@@ -35,7 +36,6 @@
   let tabs = ["Info", "Tasks", "Console", "Files"];
   let currTab = tabs[0];
   let consoleCommand = "";
-  let consoleText = "";
   let msgCount = 0;
   let deleteAgentBtn = null;
   let infoPageError = "";
@@ -70,7 +70,6 @@
     if (msgCount === consoleMsgs.length) // A hacky solution for an autoscroll bug when nothing changes
       return;
     msgCount = consoleMsgs.length;
-    consoleText = consoleMsgs.join("\n");
     consoleToBottom();
   };
 
@@ -129,10 +128,10 @@
 
   const setConsoleSize = () => {
 
-    let output = document.getElementById('console-text');
+    let consoleElem = document.getElementById('console-text');
     let wrapper = document.getElementById('tabs-container');
-    if (output && wrapper)
-      output.rows = wrapper.offsetHeight / 35;
+    if (consoleElem && wrapper)
+      consoleElem.style['height'] = `${wrapper.offsetHeight - 95}px`;
   };
 
   /**
@@ -209,7 +208,10 @@
     }
   };
 
-  window.onresize = setConsoleSize;
+  onMount(() => {
+    setConsoleSize();
+    window.onresize = setConsoleSize;
+  }); 
 
 </script>
 
@@ -218,12 +220,12 @@
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
     {#each tabs as tab, index}
-      <li class={`inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
+      <li class={"hover:text-green-500 duration-100 " + `inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
     {/each}
   </ul>
 
   <!-- A div to wrap all our tabs -->
-  <div class="m-3 text-lg no-scrollbar overflow-x-auto">
+  <div class="mt-3 mx-3 text-lg no-scrollbar overflow-x-auto">
     <!-- Render the current tab -->
     {#if (currTab === "Info")}
       <table class="w-full border-2 border-black text-left font-mono">
@@ -253,11 +255,11 @@
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Date Created</th>
-          <td class="pl-3">{new Date(agent.dateCreated).toLocaleString()}</td>
+          <td class="pl-3">{formatDate(agent.dateCreated)}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Last Contact</th>
-          <td class="pl-3">{new Date(agent.lastSeen).toLocaleString() + ` (${((Date.now() - agent.lastSeen) / (1000 * 60)).toFixed(2)} minutes)`}</td>
+          <td class="pl-3">{formatDate(agent.lastSeen) + ` (${((Date.now() - agent.lastSeen) / (1000 * 60)).toFixed(2)} minutes)`}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Callback Delay</th>
@@ -275,8 +277,16 @@
     {:else if (currTab === "Tasks")}
       <TasksList {socket} {agent} {tasks} {selectedTask} {showTaskModal} {selectedTaskData} on:selectTask={selectTask} on:releaseTask={releaseTask}/>
     {:else if (currTab === "Console")}
-      <textarea id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-black p-1 text-white break-all" rows="15" bind:value={consoleText} readonly></textarea>
-      <input id="console-input" class="w-full border-2 border-gray-900 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec} autocomplete="off"> 
+      <div id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-green-700 p-1 text-white overflow-y-auto whitespace-pre-wrap break-all border-2">
+        {#each consoleMsgs as msg}
+          {#if (msg.prompt)}
+            <p><span class="text-green-400">{"("}</span><span class="text-yellow-400">{msg.prompt.trim()}</span><span class="text-green-400">{") > "}</span>{msg.msg}</p>
+          {:else}
+            <p>{msg.msg}</p>
+          {/if}
+        {/each}
+      </div>
+      <input id="console-input" class="w-full border-2 px-2 font-mono bg-gray-300 placeholder-gray-500" type="text" placeholder="command..." spellcheck="false" bind:value={consoleCommand} on:keyup={consoleExec} autocomplete="off"> 
     {:else if (currTab === "Files")}
       <AgentFiles {session} {socket} {agent}/>
     {/if}
