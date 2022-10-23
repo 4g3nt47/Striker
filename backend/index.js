@@ -31,9 +31,7 @@ const SECRET = process.env.SECRET;
 global.ORIGIN_URL = process.env.ORIGIN_URL;
 global.REGISTRATION_KEY = process.env.REGISTRATION_KEY;
 global.MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE);
-global.UPLOAD_LOCATION = process.env.UPLOAD_LOCATION || "static/";
-if (!global.UPLOAD_LOCATION.endsWith("/"))
-  global.UPLOAD_LOCATION += "/";
+global.UPLOAD_LOCATION = process.env.UPLOAD_LOCATION || "static";
 
 // Setup express
 const app = express();

@@ -76,11 +76,13 @@
   // Scroll to the bottom of the console display.
   const consoleToBottom = () => {
 
+    console.log("Scrolling to bottom...");
     setTimeout(() => {
       let elem = document.getElementById('console-text');
+      console.log(elem);
       if (elem)
         elem.scrollTop = elem.scrollHeight;
-    }, 70);
+    }, 100);
   };
 
   // Called when tasks have been updated.
@@ -220,7 +222,7 @@
   <!-- Our tabs -->
   <ul class="list-none text-center bg-gray-900 text-white">
     {#each tabs as tab, index}
-      <li class={"hover:text-green-500 duration-100 " + `inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
+      <li class={"hover:text-green-500 " + `inline-block w-32 px-5 mx-10 cursor-pointer ${tab === currTab ? "text-gray-900 bg-gray-300" : ""}`} on:click={() => switchTab(tab)}>{tab}</li>
     {/each}
   </ul>
 

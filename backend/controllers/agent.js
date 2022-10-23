@@ -354,7 +354,7 @@ export const downloadFile = async (req, res) => {
   const file = await File.findOne({uid: fileID});
   if (!file)
     return res.status(404).json({error: "Invalid file!"});
-  res.download(`${global.UPLOAD_LOCATION}${fileID}`, file.name, async (err) => {
+  res.download(`${path.join(global.UPLOAD_LOCATION, file.uid)}`, file.name, async (err) => {
     if (err){
       console.log(err);
     }else{

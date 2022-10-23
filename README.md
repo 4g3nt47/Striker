@@ -87,7 +87,7 @@ SECRET=<random string to use for signing session cookies and encrypting session 
 ORIGIN_URL=<full URL of the server you will be hosting the frontend at. Used to setup CORS>
 REGISTRATION_KEY=<random string to use for authentication during signup>
 MAX_UPLOAD_SIZE=<max file upload size, in bytes>
-UPLOAD_LOCATION=<directory to store uploaded files to (default: static/)>
+UPLOAD_LOCATION=<directory to store uploaded files to (default: static)>
 SSL_KEY=<your SSL key file (optional)>
 SSL_CERT=<your SSL cert file (optional)>
 ```
@@ -170,7 +170,7 @@ You can now login :)
 
 **A) Dumb Pipe Redirection**
 
-A dump pipe redirector written for *Striker* is available at `redirector/redirector.py`. Obviously, this will only work for plain HTTP traffic, or for HTTPS when SSL verification is disabled (you can do this by enabling the `INSECURE_SSL` macro in the C agent).
+A dumb pipe redirector written for *Striker* is available at `redirector/redirector.py`. Obviously, this will only work for plain HTTP traffic, or for HTTPS when SSL verification is disabled (you can do this by enabling the `INSECURE_SSL` macro in the C agent).
 
 The following example listens on port `443` on all interfaces and forward to `c2.example.org` on port `443`;
 

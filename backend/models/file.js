@@ -4,6 +4,7 @@
  */
 
 import fs from 'fs';
+import path from 'path';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 
@@ -60,7 +61,7 @@ export const deleteFile = async (agentID, fileID) => {
   const file = await File.findOne({agentID, uid: fileID});
   if (!file)
     throw new Error("Invalid file!");
-  const loc = global.UPLOAD_LOCATION + fileID;
+  const loc = path.join(global.UPLOAD_LOCATION, file.uid);
   fs.unlink(loc, () => {});
   return await File.deleteOne({agentID, uid: fileID});
 };
