@@ -126,7 +126,7 @@ unsigned short queue_seek(queue *q, size_t pos){
 
   if (pos >= q->size)
     return 0;
-  q->pos = pos;
+  q->pos = pos >= 0 ? pos : 0;
   return 1;
 }
 

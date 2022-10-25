@@ -10,9 +10,12 @@
 
 #ifdef __WIN32__
   #define IS_WINDOWS
+  #define WIN32_LEAN_AND_MEAN
+  #define _WIN32_WINNT 0x0501
   #include <windows.h>
-  // #include <winsock.h>
   #include <wininet.h>
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
   #define PATH_MAX 256
 #else
   #define IS_LINUX
@@ -126,10 +129,8 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
 // Create a TCP tunnel for a new connection.
 #ifdef IS_LINUX
   void *tcp_tunnel_route(void *ptr);
-#else
-  DWORD WINAPI tcp_tunnel_route(LPVOID ptr);
 #endif
-
+  
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
 
