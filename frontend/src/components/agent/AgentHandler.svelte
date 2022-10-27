@@ -40,6 +40,7 @@
   let deleteAgentBtn = null;
   let infoPageError = "";
   let cmdHistory = {cmds: [], index: 0};
+  let agentTypes = ["Native C", "Python", "Unknown"];
 
   // Handles the `selectTask` event created by TasksList.svelte
   const selectTask = (e) => {
@@ -234,6 +235,10 @@
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">ID</th>
           <td class="pl-3">{agent.uid}</td>
+        </tr>
+        <tr class="border-b-2 border-gray-900">
+          <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Type</th>
+          <td class="pl-3">{agentTypes[agent.agentType]}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">OS</th>

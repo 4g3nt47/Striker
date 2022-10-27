@@ -26,12 +26,13 @@ import logRouter from './routes/log.js';
 // Setup global configs.
 const DB_URL = process.env.DB_URL;
 const HOST = process.env.HOST || "127.0.0.1";
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT) || 3000;
 const SECRET = process.env.SECRET;
 global.ORIGIN_URL = process.env.ORIGIN_URL;
 global.REGISTRATION_KEY = process.env.REGISTRATION_KEY;
-global.MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE);
+global.MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE) || 102400000;
 global.UPLOAD_LOCATION = process.env.UPLOAD_LOCATION || "static";
+global.KEYMON_MAX_KEYS = parseInt(process.env.KEYMON_MAX_KEYS) || 50000;
 
 // Setup express
 const app = express();

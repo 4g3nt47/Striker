@@ -13,6 +13,7 @@ import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
 import Redirector, * as rdModel from '../models/redirector.js';
 import {logStatus, logWarning, logError} from '../models/log.js';
+import {output} from '../lib/utils.js';
 
 // A generic error message for requests that got denied due to perm issues.
 const PERM_ERROR = {error: "Permission denied!"};
@@ -37,6 +38,7 @@ export const agentInit = async (req, res) => {
     data.config.redirectors = [];
     for (let r of rds)
       data.config.redirectors.push(r.url);
+    output(`New agent called home: ${data.config.uid}`);
     return res.json(data.config);
   }).catch(error => {
     return errRsp;
