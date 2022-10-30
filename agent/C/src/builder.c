@@ -23,15 +23,15 @@ const char DELAY_MARKER[] = "[STRIKER_DELAY]";
 int main(int argc, char **argv){
   
   if (argc < 6){
-    fprintf(stderr, "[-] Usage: %s <auth_key> <url> <delay> <stub> <outfile>\n", argv[0]);
+    fprintf(stderr, "[-] Usage: %s <url> <auth_key> <delay> <stub> <outfile>\n", argv[0]);
     return 1;
   }
-  char *auth_key = argv[1];
+  char *auth_key = argv[2];
   if (strlen(auth_key) != 32){
     fprintf(stderr, "[-] 'auth_key' must be 32 characters long!\n");
     return 1;
   }
-  char *url = argv[2];
+  char *url = argv[1];
   char *delay = argv[3];
   if (strlen(delay) > 19){
     fprintf(stderr, "[-] 'delay' too long. Must be < 20 digits!\n");

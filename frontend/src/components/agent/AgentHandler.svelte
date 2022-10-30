@@ -77,7 +77,6 @@
   // Scroll to the bottom of the console display.
   const consoleToBottom = () => {
 
-    console.log("Scrolling to bottom...");
     setTimeout(() => {
       let elem = document.getElementById('console-text');
       if (elem)
