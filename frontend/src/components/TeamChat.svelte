@@ -50,10 +50,12 @@
       return;
     if (!input)
       return;
-    if (input === "/clear")
+    if (input === "/clear"){
       dispatch("clearMessages");
-    else
+      msgCount = 0;
+    }else{
       dispatch("sendMessage", input);
+    }
     input = "";
   };
 

@@ -268,7 +268,10 @@
 
     // Handles custom errors.
     socket.on('striker_error', (err) => {
+      
       console.log("Striker Error: " + err);
+      if (selectedAgent)
+        updateConsoleMessage(selectedAgent.uid, {msg: `Error: ${err}`});
     });
 
     // Handles server-side disconnection.
@@ -277,7 +280,7 @@
     });
   };
 
-  // Load agents from the server using the REST API.
+  // Load agents from the server.
   const loadAgents = async () => {
 
     try{
@@ -295,7 +298,7 @@
     }
   };
 
-  // Load all tasks from the server using the REST API.
+  // Load all tasks from the server.
   const loadTasks = async () => {
 
     try{
@@ -311,7 +314,7 @@
     }
   };
 
-  // Load all team chat messages from the server using the REST API.
+  // Load all team chat messages from the server.
   const loadTeamchatMessages = async () => {
 
     try{

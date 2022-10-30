@@ -174,6 +174,7 @@
     }
     if (consoleCommand === "clear"){
       dispatch("clearConsole", agent.uid);
+      msgCount = 0;
     }else{
       socket.emit("agent_console_input", {
         agent,

