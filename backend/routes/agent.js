@@ -31,7 +31,7 @@ router.get("/ping/:agentID", agentPing);
 
 // File routes
 router.get("/files/:agentID", getAgentFiles);
-router.post("/upload/:agentID", uploadFile);
+router.post("/upload/:agentID/:taskID", uploadFile);
 router.get("/upload/:agentID/:fileID", reuploadFile);
 router.get("/download/:fileID", downloadFile);
 router.delete("/file/:agentID/:fileID", deleteFile);

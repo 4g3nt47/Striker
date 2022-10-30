@@ -251,11 +251,18 @@ export const getAgentFiles = (req, res) => {
 /**
  * Used by both agents and operators to upload files to the server.
  */
-export const uploadFile = (req, res) => {
+export const uploadFile = async (req, res) => {
   
   const socketServer = global.socketServer;
   const agentID = req.params.agentID;
+  const taskID = req.params.taskID;
   const userUpload = req.session.loggedIn;
+  if (!userUpload){
+    // Use task ID to verify if agent upload is for a legitimate and incomplete task.
+    const task = await Task.findOne({taskID: taskID.toString(), completed: false});
+    if (!task)
+      return res.status(403).json(PERM_ERROR);
+  }
   const storage = multer.diskStorage({
     destination: global.UPLOAD_LOCATION,
     filename: (req, file, callback) => {

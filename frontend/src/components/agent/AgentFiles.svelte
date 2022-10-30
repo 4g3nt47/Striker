@@ -66,7 +66,7 @@
       if (!file)
         throw new Error("Please select a file to upload!");
       formData.append("file", file);
-      const rsp = await fetch(`${session.api}/agent/upload/${agent.uid}`, {
+      const rsp = await fetch(`${session.api}/agent/upload/${agent.uid}/null`, {
         credentials: "include",
         method: "POST",
         body: formData

