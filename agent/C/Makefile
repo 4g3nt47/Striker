@@ -17,7 +17,7 @@ cc_obj = $(cc) -c
 
 ifeq ($(target), win)
 bin/stub.exe: bin/stub.o bin/striker_utils.o bin/cJSON.o bin/builder.exe
-	$(cc) bin/stub.o bin/striker_utils.o bin/cJSON.o -lwininet -lws2_32 -o bin/stub.exe
+	$(cc) bin/stub.o bin/striker_utils.o bin/cJSON.o -lws2_32 -lwininet -lgdi32 -o bin/stub.exe
 else
 bin/stub: bin/stub.o bin/striker_utils.o bin/cJSON.o bin/builder
 	$(cc) bin/stub.o bin/striker_utils.o bin/cJSON.o -lcurl -lpthread -o bin/stub
