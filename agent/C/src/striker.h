@@ -149,6 +149,12 @@ int tcp_tunnel(session *striker, task *tsk, char *lhost, int lport, char *rhost,
 // Create a TCP bridge between two servers
 void tcp_bridge(session *striker, task *tsk, char *host1, int port1, char *host2, int port2);
 
+// Read text from the clipboard into `buff` of size `len`. Returns 0 on success.
+int clipread(char *buff, size_t len);
+
+// Write text to the clipboard. Returns 0 on success.
+int clipwrite(char *buff);
+
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
 
