@@ -283,12 +283,15 @@
     {:else if (currTab === "Tasks")}
       <TasksList {socket} {agent} {tasks} {selectedTask} {showTaskModal} {selectedTaskData} on:selectTask={selectTask} on:releaseTask={releaseTask}/>
     {:else if (currTab === "Console")}
-      <div id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-green-700 p-1 text-white overflow-y-auto whitespace-pre-wrap break-all border-2">
-        {#each consoleMsgs as msg}
+      <div id="console-text" class="w-full no-scrollbar font-mono text-md bg-gray-900 border-2 border-green-700 p-1 text-white overflow-y-auto whitespace-pre-wrap break-all">
+        {#each consoleMsgs as msg, index}
           {#if (msg.prompt)}
-            <p><span class="text-green-400">{"("}</span><span class="text-yellow-400">{msg.prompt.trim()}</span><span class="text-green-400">{") > "}</span>{msg.msg}</p>
+            <span class="text-green-400">{"("}</span><span class="text-yellow-400">{msg.prompt.trim()}</span><span class="text-green-400">{") > "}</span>{msg.msg}
           {:else}
-            <p>{msg.msg}</p>
+            {msg.msg}
+          {/if}
+          {#if ((index + 1) < consoleMsgs.length)}
+            <br>
           {/if}
         {/each}
       </div>

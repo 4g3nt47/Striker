@@ -31,3 +31,19 @@ export let formatDuration = (duration) => {
     return `${(duration / (1000 * 60 * 60)).toFixed(2)} hours`;
   return `${(duration / (1000 * 60 * 60 * 24)).toFixed(2)} days`;
 };
+
+/**
+ * Format a size in bytes to a printable string.
+ * @param {number} size - The size in bytes
+ * @return {string} The formatted size string (e.g: 10 MB) 
+ */
+export let formatSize = (size) => {
+
+  if (size < 1024)
+    return `${size} B`;
+  if (size < (1024 * 1000))
+    return `${(size / 1024).toFixed(2)} KB`;
+  if (size < (1024 * 1000000))
+    return `${(size / (1024 * 1000)).toFixed(2)} MB`;
+  return `${(size / (1024 * 1000000)).toFixed(2)} GB`;
+};

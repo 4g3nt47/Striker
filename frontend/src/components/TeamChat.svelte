@@ -72,11 +72,14 @@
 <div id="wrapper" class="max-h-full min-h-full font-mono text-md">
   <!-- <textarea id="messages" class="no-scrollbar bg-gray-900 text-white" bind:value={chatMessages} readonly></textarea> -->
   <div id="messages" class="border-2 border-green-700 p-1 no-scrollbar overflow-y-auto bg-gray-900 whitespace-pre-wrap break-all text-white">
-    {#each messages as msg}
+    {#each messages as msg, index}
       {#if (msg.username && msg.date)}
-        <p><span class="text-yellow-400">{formatDate(msg.date)}</span><span class="text-green-400">{msg.username.padStart(12, " ")}</span><span class="text-yellow-400">{ " > "}</span>{msg.message}</p>
+        <span class="text-yellow-400">{formatDate(msg.date)}</span><span class="text-green-400">{msg.username.padStart(12, " ")}</span><span class="text-yellow-400">{ " > "}</span>{msg.message}
       {:else}
-        <p class="text-green-400">{msg.message}</p>
+        <span class="text-green-400">{msg.message}</span>
+      {/if}
+      {#if ((index + 1) < messages.length)}
+        <br>
       {/if}
     {/each}
   </div>

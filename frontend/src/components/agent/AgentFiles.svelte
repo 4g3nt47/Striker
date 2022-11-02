@@ -16,7 +16,7 @@
   import SuccessMsg from '../SuccessMsg.svelte';
   import ErrorMsg from '../ErrorMsg.svelte';
   import Modal from '../Modal.svelte';
-  import {formatDate} from '../../lib/striker-utils.js';
+  import {formatDate, formatSize} from '../../lib/striker-utils.js';
 
   export let session = {};
   export let socket = null;
@@ -184,7 +184,7 @@
         </tr>
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">File Size</th>
-          <td class="pl-2">{`${((selectedFile.size) / (1024 * 1024)).toFixed(3)} MB`}</td>
+          <td class="pl-2">{formatSize(selectedFile.size)}</td>
         </tr>        
         <tr class="border-2 border-gray-900">
           <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Downloads Count</th>

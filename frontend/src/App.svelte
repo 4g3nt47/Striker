@@ -61,6 +61,13 @@
     saveSession();
   };
 
+  // End session and delete it's cache.
+  const endSession = () => {
+    localStorage.removeItem("striker");
+    window.location = "/";
+  };
+
+
   // Switch page.
   const switchPage = (newPage) => {
     session.page = newPage;
@@ -91,8 +98,7 @@
     fetch(`${session.api}/user/logout`, {
       credentials: "include"
     });
-    session = createSession();
-    saveSession();
+    endSession();
   };
 
   // Run some setups following authentication.
@@ -294,7 +300,9 @@
       for (let i = 0; i < agents.length; i++)
         consoleMsgs[agents[i].uid] = [];
     }catch(err){
+      // If this fails it's likely other loaders will fail too. To avoid bombarding user with alerts, we are only raising one.
       alert("Error loading agents: " + err.message);
+      endSession();
     }
   };
 
@@ -310,7 +318,8 @@
         throw new Error(data.error);
       tasks = data;
     }catch(err){
-      alert("Error loading tasks: " + err.message);
+      console.log("Error loading tasks: " + err.message);
+      endSession();
     }
   };
 
@@ -326,7 +335,8 @@
         throw new Error(data.error);
       teamchatMessages = data;
     }catch(err){
-      alert("Error loadng team chat: " + err.message);
+      console.log("Error loadng team chat: " + err.message);
+      endSession();
     }
   };
 
@@ -342,7 +352,8 @@
         throw new Error(data.error);
       users = data;
     }catch(err){
-      alert("Error loading users: " + err.message);
+      console.log("Error loading users: " + err.message);
+      endSession();
     }
   };
 
@@ -358,7 +369,8 @@
         throw new Error(data.error);
       authKeys = data;
     }catch(err){
-      alert("Error loading keys: " + err.message);
+      console.log("Error loading keys: " + err.message);
+      endSession();
     }
   };
 
@@ -374,7 +386,8 @@
         throw new Error(data.error);
       redirectors = data;
     }catch(err){
-      alert("Error loading redirectors: " + err.message);
+      console.log("Error loading redirectors: " + err.message);
+      endSession();
     }
   };
 
@@ -390,7 +403,8 @@
         throw new Error(data.error);
       eventLogs = data;
     }catch(err){
-      alert("Error loading event logs: " + err.message);
+      console.log("Error loading event logs: " + err.message);
+      endSession();
     }
   };
 

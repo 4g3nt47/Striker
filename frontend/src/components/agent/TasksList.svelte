@@ -105,7 +105,7 @@
         {selectedTaskData}
       </div>
       {#if (selectedTask && selectedTask.completed)}
-        <p>Task Result:</p>
+        <p>Task Result: <span on:click={() => navigator.clipboard.writeText(selectedTask.result)}><Fa icon={icons.faClipboard} class="inline text-gray-900 mt-2 hover:text-green-600"/></span></p>
         <div class="no-scrollbar max-h-80 overflow-y-auto break-all whitespace-pre-wrap p-1 text-white bg-gray-900 border-2 border-black">
           {selectedTask.result.length > 0 ? selectedTask.result : "[Task returned no result]"}
         </div>
