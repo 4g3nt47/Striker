@@ -21,7 +21,7 @@
   import Button from '../Button.svelte';
   import ErrorMsg from '../ErrorMsg.svelte';
   import AgentFiles from './AgentFiles.svelte';
-  import {formatDate} from '../../lib/striker-utils.js';
+  import {formatDate, formatDuration} from '../../lib/striker-utils.js';
 
   export let session = {};
   export let socket = null;
@@ -265,11 +265,11 @@
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Last Contact</th>
-          <td class="pl-3">{formatDate(agent.lastSeen) + ` (${((Date.now() - agent.lastSeen) / (1000 * 60)).toFixed(2)} minutes)`}</td>
+          <td class="pl-3">{formatDate(agent.lastSeen) + ` (${formatDuration(Date.now() - agent.lastSeen)})`}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Callback Delay</th>
-          <td class="pl-3">{agent.delay} seconds</td>
+          <td class="pl-3">{formatDuration(agent.delay * 1000)}</td>
         </tr>
         <tr class="border-b-2 border-gray-900">
           <th class="w-1/4 text-right pr-2 bg-gray-900 text-white">Frozen</th>

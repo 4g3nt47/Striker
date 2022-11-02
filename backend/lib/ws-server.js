@@ -87,8 +87,9 @@ export const setupWS = (httpServer) => {
       "tasks": "List running tasks",
       "tunnel <lhost>:<lport> <rhost>:<rport>": "Start a TCP tunnel",
       "bridge <host1>:<port1> <host2>:<port2>": "Start a TCP bridge b/w 2 servers",
-      "system <cmd>": "Run a shell command",
-      "webload <url> <file>": "Download a file from a URL",
+      "system <cmd>": "Run a shell command (same as '!<cmd>')",
+      "!<cmd>": "A shorthand for 'system <cmd>'",
+      "webload <url> <file>": "Download a file from a URL"
     }
 
     /**
@@ -142,8 +143,12 @@ export const setupWS = (httpServer) => {
             client.emit("agent_console_output", {
               agentID, msg: helpPage
             });
-          }else if (input.startsWith("system ")){ // Create a system command task
-            let cmd = input.substr(7).trim();
+          }else if (input.startsWith("system ") || input.startsWith("!")){ // Create a system command task
+            let cmd = "";
+            if (input[0] === '!')
+              cmd = input.substr(1).trim();
+            else
+              cmd = input.substr(7).trim();
             const taskData = {agentID, taskType: "system", data: {cmd}};
             taskModel.createTask(username, taskData);
           }else if (input === "freeze"){ // Freeze an agent.
@@ -247,7 +252,7 @@ export const setupWS = (httpServer) => {
           }else if (input.startsWith("webload ")){
             let url = input.split(" ")[1].trim();
             let file = input.split(" ")[2].trim();
-            if (!(url.startsWith("http://") || url.startsWith("http://"))){
+            if (!(url.startsWith("http://") || url.startsWith("https://"))){
               client.emit("agent_console_output", {agentID, msg: "Only HTTP(s) URLs are supported!"});
             }else{
               taskModel.createTask(username, {

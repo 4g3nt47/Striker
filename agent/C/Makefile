@@ -4,9 +4,16 @@
 
 ifeq ($(target), win)
 	cc = x86_64-w64-mingw32-gcc
+	ifeq ($(arch), 32)
+		cc = i686-w64-mingw32-gcc
+	endif
 else
 	cc = gcc
+	ifeq ($(arch), 32)
+		cc += -m32
+	endif
 endif
+
 cc += -Os -Wall
 ifeq ($(debug), 1)
 	cc += -ggdb3

