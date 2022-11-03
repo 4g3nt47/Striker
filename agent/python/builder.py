@@ -1,8 +1,11 @@
 #!/usr/bin/python3
-#--------------------------------------------------------
-# The payload builder for the python agent of Striker C2.
-#                                      Author: Umar Abdul
-#--------------------------------------------------------
+#----------------------------------------------------------
+#   The payload builder for the python agent of Striker C2.
+# Note that this does not obfuscate the implant. It just
+# add the C2 config to the payload stub and base64-encode
+# the result. 
+#                                        Author: Umar Abdul
+#----------------------------------------------------------
 
 import sys, os
 from base64 import b64encode

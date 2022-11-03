@@ -1,7 +1,7 @@
 <script>
 
   /**
-   * @file The primary component.
+   * @file The primary component. This is where all the fun starts :)
    * @author Umar Abdul
    */
 
@@ -95,7 +95,7 @@
   // Logout the user.
   const logout = async () => {
 
-    fetch(`${session.api}/user/logout`, {
+    await fetch(`${session.api}/user/logout`, {
       credentials: "include"
     });
     endSession();

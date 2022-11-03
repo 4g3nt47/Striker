@@ -51,6 +51,9 @@ typedef struct{
   unsigned long delay; // Callback delay, in seconds.
   unsigned short abort; // Will be set to 1 if session need to be ended.
   queue *tasks; // Running tasks.
+  #ifdef IS_LINUX
+  char *kbd_event_file;
+  #endif
 } session;
 
 // A struct for representing a single task.

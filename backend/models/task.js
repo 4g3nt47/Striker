@@ -69,7 +69,7 @@ export default Task;
  * @param {string} owner - The task owner (username of the user that creates the task)
  * @param {object} data - The task data (agentID, taskType, and data)
  * @param {onComplete} function - An async function to call after the tasks has been completed. Takes 2 arguments; the agent, and the task. If defined, this will be called before saving the updated task and agent object to the database and emitting the 'update_task' and 'update_agent' WS events.
- * @return {object} The task created.
+ * @return {object} The task created, null on error.
  */
 export const createTask = async (owner, data, onComplete) => {
 
@@ -77,6 +77,8 @@ export const createTask = async (owner, data, onComplete) => {
   const taskID = crypto.randomBytes(8).toString('hex').trim();
   let agentID = data.agentID.toString().trim();
   const agent = await getAgent(agentID); // will throw an error in not valid.
+  if (agent.aborted)
+    return null;
   const taskType = data.taskType.toString().trim();
   const task = new Task({
     uid: taskID,
@@ -87,6 +89,11 @@ export const createTask = async (owner, data, onComplete) => {
     dateCreated: Date.now()
   });
   await task.save();
+  if (task.taskType === "abort"){
+    agent.aborted = true;
+    await agent.save();
+    socketServer.emit("update_agent", agent);
+  }
   logStatus(`Task '${task.uid}' created for agent '${task.agentID}' by user '${task.owner}'`);
   if (onComplete)
     taskCallbacks[task.uid] = onComplete;

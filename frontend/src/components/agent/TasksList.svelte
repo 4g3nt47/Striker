@@ -51,7 +51,7 @@
     if (!confirm(`Delete task '${selectedTask.uid}'?`))
       return;
     socket.emit("agent_console_input", {
-      agent,
+      agentID: agent.uid,
       input: "delete task " + selectedTask.uid
     });
   };
@@ -62,7 +62,7 @@
     if (!confirm(`Kill task '${selectedTask.uid}'?`))
       return;
     socket.emit("agent_console_input", {
-      agent,
+      agentID: agent.uid,
       input: "kill " + selectedTask.uid
     });
     killTaskBtn.disabled = true;

