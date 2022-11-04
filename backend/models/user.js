@@ -53,7 +53,7 @@ const userSchema = mongoose.Schema({
 userSchema.methods.setPassword = async function(password){
   
   password = password.toString().trim();
-  if (!validator.isStrongPassword(password))
+  if (password.length < 10)
     throw new Error("Password too weak!");
   this.password = await bcrypt.hash(password, 10);
   return this.password;
