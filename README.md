@@ -4,7 +4,7 @@
 
 ## Disclaimer
 
-This project is under active development. Most of the features are experimental, with more to come. Expect changes.
+This project is under active development. Most of the features are experimental, with more to come. Expect breaking changes.
 
 ## Features
 
@@ -49,7 +49,7 @@ The source code is in the `backend/` directory. To setup the server;
 
 1. Setup a MongoDB database;
 
-TODO: Add some instructions on how to setup *MongoDB*
+Striker uses MongoDB as backend database to store all important data. You can install this locally on your machine using [this guide](https://www.digitalocean.com/community/tutorials/how-to-install-mongodb-on-ubuntu-20-04) for debian-based distros, or create a free one with [MongoDB Atlas](https://www.freecodecamp.org/news/get-started-with-mongodb-atlas/) (A database-as-a-service platform).
 
 2. Move into the source directory;
 
@@ -154,12 +154,14 @@ To create your first admin account;
 - Update the `users` collection and set the `admin` field of the target user to `true`;
 
 There are different ways you can do this. If you have `mongo` available in you CLI, you can do it using;
+
 ```bash
 $ mongo <your MongoDB connection URL>
 > db.users.updateOne({username: "<your username>"}, {$set: {admin: true}})
 ```
 
 You should get the following response if it works;
+
 ```json
 { "acknowledged" : true, "matchedCount" : 1, "modifiedCount" : 1 }
 ```
@@ -242,6 +244,7 @@ $ curl https://striker.local
 ```
 
 If it works, you should get the 404 response used by the backend, like;
+
 ```json
 {"error":"Invalid route!"}
 ```
@@ -256,32 +259,45 @@ The windows agent does not have an external dependency. It uses `wininet` for co
 
 1. **Building for linux**
 
+Assuming you're on a 64 bit host, the following will build for 64 host;
+
 ```bash
 $ cd agent/C
 $ mkdir bin
 $ make
 ```
 
+To build for 32 bit on 64;
+
+```bash
+$ sudo apt install gcc-multilib
+$ make arch=32
+```
+
 The above compiles everything into the `bin/` directory. You will need only two files to generate working implants;
+
 - `bin/stub` - This is the agent stub that will be used as template to generate working implants.
 - `bin/builder` - This is what you will use to patch the agent stub to generate working implants.
 
 The builder accepts the following arguments;
+
 ```bash
 $ ./bin/builder 
-[-] Usage: ./bin/builder <auth_key> <url> <delay> <stub> <outfile>
+[-] Usage: ./bin/builder <url> <auth_key> <delay> <stub> <outfile>
 ```
 
 Where;
-- `<auth_key>` -  The authentication key to use when connecting to the C2. You can create this in the *auth keys* tab of the web UI.
+
 - `<url>` - The server to report to. This should ideally be a redirector, but a direct URL to the server will also work.
+- `<auth_key>` -  The authentication key to use when connecting to the C2. You can create this in the *auth keys* tab of the web UI.
 - `<delay>` - Delay between each callback, in seconds. This should be at least 2, depending on how noisy you want it to be.
 - `<stub>` - The stub file to read, `bin/stub` in this case.
 - `<outfile>` - The output filename of the new implant.
 
 Example;
+
 ```bash
-$ ./bin/builder 979a9d5ace15653f8ffa9704611612fc https://localhost:3000 5 bin/stub bin/striker
+$ ./bin/builder https://localhost:3000 979a9d5ace15653f8ffa9704611612fc 5 bin/stub bin/striker
 [*] Obfuscating strings...
 [+] 69 strings obfuscated :)
 [*] Finding offsets of our markers...
@@ -296,25 +312,50 @@ $ ./bin/builder 979a9d5ace15653f8ffa9704611612fc https://localhost:3000 5 bin/st
 
 2. **Building for windows**
 
-To build the agent for windows hosts, you will need `MinGW` as it provides some of the headers required, like `unistd.h`. To build for windows;
+You will need *MinGW* for this. The following will install the 32 and 64 bit dev windows environment;
+
+```bash
+$ sudo apt install mingw-w64
+```
+
+Build for 64 bit;
 
 ```cmd
-C:\Striker> chdir agent
-C:\Striker\agent> mkdir bin
-C:\Striker\agent> make os=win
+$ cd agent/C
+$ mdkir bin
+$ make target=win
+```
+
+To compile for 32 bit;
+
+```cmd
+$ make target=win arch=32
 ```
 
 This will compile everything into the `bin/` directory, and you will have the builder and the stub as `bin\stub.exe` and `bin\builder.exe`, respectively.
 
 **B) The Python Agent**
 
-Striker also comes with a self-contained python agent. This is located at `agent/python/striker.py`. Only the most basic features are implemented in this agent, and is intended to be used where the main C agent could not, or when only basic functionalities are needed.
+Striker also comes with a self-contained python 3 agent. This is located at `agent/python/`. Only the most basic features are implemented in this agent. Useful for hosts that can't run the C agent but have python installed.
 
-To configure this agent, open the file and edit the following variables;
-- `c2URL` - This is the URL to report to.
-- `authKey` - The authentication key to use.
-- `delay` - Callback delay, in seconds.
-- `MAX_FAILED_CONNS` - Number of failed attempts to tolerate before attempting to switch server.
+There are 2 file in this directory;
+
+- `stub.py` - This is the payload stub to pass to the builder.
+- `builder.py` - This is what you'll be using to generate an implant.
+
+Usage example:
+
+```bash
+$ ./builder.py
+[-] Usage: builder.py <url> <auth_key> <delay> <stub> <outfile>
+# The following will generate a working payload as `output.py`
+$ ./builder.py http://localhost:3000 979a9d5ace15653f8ffa9704611612fc 2 stub.py output.py
+[*] Loading agent stub...
+[*] Writing configs...
+[+] Agent built successfully: output.py
+# Run it
+$ python3 output.py
+```
 
 ## Best Wishes
 
