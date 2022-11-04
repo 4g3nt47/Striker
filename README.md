@@ -1,8 +1,12 @@
 # Striker C2
 
-**Striker** is a simple *command and control* (C2) program.
+**Striker** is a simple *Command and Control* (C2) program.
+
+![Pasted image 20221022194999](https://user-images.githubusercontent.com/54174043/199905391-d07651bb-e720-4b41-90ee-ec5401e979e8.png)
 
 ## Disclaimer
+
+![image](https://user-images.githubusercontent.com/54174043/199905117-2c6c7555-2210-461b-85f0-5d0062127f27.png)
 
 This project is under active development. Most of the features are experimental, with more to come. Expect breaking changes.
 
