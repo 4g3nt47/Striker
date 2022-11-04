@@ -140,3 +140,7 @@ For admins only. This menu displays the latest **250** event logs created in the
 Should the UI start acting weird, or requested actions not being performed without any visible error, check your console logs in the *developer console* of your browser. If you don't see anything of interest, a simple page reload may fix some issues.
 
 Should the problem persist, try going to your *local storage* tab in the developer console of your browser, and delete an entry with the name `striker`. This is what the application uses to track your session. Reload the page and you should be back at the login page.
+
+## Support
+
+If you like the project, consider helping me turn [coffee into code](https://ko-fi.com/4g3nt47)!
