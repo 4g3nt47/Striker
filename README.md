@@ -357,6 +357,6 @@ $ ./builder.py http://localhost:3000 979a9d5ace15653f8ffa9704611612fc 2 stub.py 
 $ python3 output.py
 ```
 
-## Best Wishes
+## Getting Started
 
-Happy Hacking! :)
+After following the above instructions, *Striker* should now be ready for use. Kindly go through [the usage guide](/USAGE.md). Have fun, and happy hacking! :)
