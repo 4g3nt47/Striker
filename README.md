@@ -363,4 +363,8 @@ $ python3 output.py
 
 ## Getting Started
 
-After following the above instructions, *Striker* should now be ready for use. Kindly go through [the usage guide](/USAGE.md). Have fun, and happy hacking! :)
+After following the above instructions, *Striker* should now be ready for use. Kindly go through [the usage guide](/USAGE.md). Have fun, and happy hacking!
+
+## Support
+
+If you like the project, consider helping me turn [coffee into code](https://ko-fi.com/4g3nt47)!
