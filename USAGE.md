@@ -49,7 +49,7 @@ The **Tasks** tab shows a list of all tasks created for the agent;
 
 ![Pasted image 20221022094156](https://user-images.githubusercontent.com/54174043/199900464-b8e899f6-82cb-4311-8408-b17b0e6f80b3.png)
 
-Like most lists you will see in the UI, the listed tasks are clickable, and doing so will open a modal with information about the agent;
+Like most lists you will see in the UI, the listed tasks are clickable, and doing so will open a modal with information about the task;
 
 ![Pasted image 20221022094434](https://user-images.githubusercontent.com/54174043/199900593-2da4d9c8-a135-4bb0-8c32-ffc086d99391.png)
 
