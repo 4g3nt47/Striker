@@ -9,6 +9,8 @@
   import {io} from 'socket.io-client';
   import Fa from 'svelte-fa/src/fa.svelte';
   import * as icons from '@fortawesome/free-solid-svg-icons';
+  import Modal from './components/Modal.svelte';
+  import Button from './components/Button.svelte';
   import Login from './components/Login.svelte';
   import Register from './components/Register.svelte';
   import SuccessMsg from './components/SuccessMsg.svelte';
@@ -82,11 +84,8 @@
   // Called after a successful login
   const loggedIn = (e) => {
 
-    const user = e.detail;
+    session = {...session, ...e.detail};
     session.loggedIn = true;
-    session.username = user.username;
-    session.admin = user.admin;
-    session.token = user.token;
     session.page = "agents";
     setupC2();
     saveSession();
@@ -512,6 +511,57 @@
     selectedAuthKey = null;
   };
 
+  // Show/hide the profile modal
+  const toggleProfileModal = () => {
+
+    if (showProfileModal){
+      showProfileModal = false;
+      userProfileFields.password = "";
+      userProfileFields.confPassword = "";
+      userProfileFields.success = "";
+      userProfileFields.error = "";
+      switchPage("agents");
+    }else{
+      showProfileModal = true;
+    }
+  };
+
+  // Reset password from user profile
+  const resetPassword = async () => {
+    
+    userProfileFields.success = "";
+    userProfileFields.error = "";
+    resetPasswordBtn.innerText = "Changing password...";
+    resetPasswordBtn.disabled = true;
+    try{   
+      const password = userProfileFields.password;
+      const confPassword = userProfileFields.confPassword;
+      if (password !== confPassword)
+        throw new Error("Password must match!");
+      if (password.length < 8)
+        throw new Error("Password too weak!");
+      const res = await fetch(`${session.api}/user/password/${session.username}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({password})
+      });
+      const data = await res.json();
+      if (res.status !== 200)
+        throw new Error(data.error);
+      userProfileFields.success = data.success;
+      userProfileFields.password = "";
+      userProfileFields.confPassword = "";
+    }catch(err){
+      userProfileFields.error = err.message;
+    }finally{
+      resetPasswordBtn.disabled = false;
+      resetPasswordBtn.innerText = "Change Password";
+    }
+  };
+
   let agents = []; // All available agents.
   let selectedAgent = null; // The current agent being handled by the user
   let tasks = {}; // All agent IDs mapped to an array of their tasks.
@@ -526,6 +576,14 @@
   let showSelectedKeyModal = false; // Decides when the modal for a selected key is shown.
   let redirectors = []; // All available redirectors.
   let eventLogs = []; // Server event logs. For admins.
+  let showProfileModal = false;
+  let userProfileFields = {
+    password: "",
+    confPassword: "",
+    success: "",
+    error: ""
+  };
+  let resetPasswordBtn = null;
 
   let socket = null;
   let session = loadSession();
@@ -546,6 +604,43 @@
 
 </script>
 
+{#if (session.loggedIn)}
+  <!-- Profile modal -->
+  <Modal width="w-1/2" show={showProfileModal} on:modalClosed={toggleProfileModal}>
+    <div class="font-mono text-md">
+      <table class="w-full">
+        <tr class="border-2 border-gray-900">
+          <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Username</th>
+          <td class="pl-2">{session.username}</td>
+        </tr>
+        <tr class="border-2 border-gray-900">
+          <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Admin</th>
+          <td class="pl-2">{session.admin ? "yes" : "no"}</td>
+        </tr>
+        <tr class="border-2 border-gray-900">
+          <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Date Created</th>
+          <td class="pl-2">{formatDate(session.creationDate)}</td>
+        </tr>
+        <tr class="border-2 border-gray-900">
+          <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Last Login</th>
+          <td class="pl-2">{formatDate(session.lastSeen)}</td>
+        </tr>
+      </table>
+      <div class="mt-2 w-full">
+        <form on:submit|preventDefault={resetPassword}>
+          <input type="password" bind:value={userProfileFields.password} placeholder="New password..." required>
+          <input type="password" bind:value={userProfileFields.confPassword} placeholder="Confirm password..." required>
+          <div class="w-1/2 mx-auto">
+            <Button bind:btn={resetPasswordBtn} btnType="submit" type="custom" custom="text-white bg-gray-900 border-gray-900">Change Password</Button>
+          </div>          
+        </form>
+      </div>
+      <SuccessMsg success={userProfileFields.success}/>
+      <ErrorMsg error={userProfileFields.error}/>
+    </div>
+  </Modal>
+{/if}
+
 <div>
   {#if (session.page === "login")}
     <Login {session} on:switchPage={switchPageHandler} on:loggedIn={loggedIn}/>
@@ -565,11 +660,12 @@
           <li class={session.page === "redirectors" ? "text-green-600" : ""} on:click={() => switchPage("redirectors")}><Fa icon={icons.faArrowsSpin} class="inline-block w-10"/>Redirectors</li>
           <li class={session.page === "keys" ? "text-green-600" : ""} on:click={() => switchPage("keys")}><Fa icon={icons.faKey} class="inline-block w-10"/>Auth Keys</li>
           <li class={session.page === "chat" ? "text-green-600" : ""} on:click={() => switchPage("chat")}><Fa icon={icons.faMessage} class="inline-block w-10"/>Team Chat</li>
-          <!-- Addutional menu for administrators -->
           {#if (session.admin)}
+            <!-- Addutional menu for administrators -->
             <li class={session.page === "users" ? "text-green-600" : ""} on:click={() => switchPage("users")}><Fa icon={icons.faUsers} class="inline-block w-10"/>Users</li>
             <li class={session.page === "logs" ? "text-green-600" : ""} on:click={() => switchPage("logs")}><Fa icon={icons.faMicroscope} class="inline-block w-10"/>Event Logs</li>
           {/if}
+          <li on:click={toggleProfileModal}><Fa icon={icons.faUser} class="inline-block w-10"/>Profile</li>
           <li on:click={logout}><Fa icon={icons.faDoorOpen} class="inline-block w-10"/>Logout</li>
         </ul>
       </div>

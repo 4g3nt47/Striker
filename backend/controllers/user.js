@@ -41,6 +41,8 @@ export const loginUser = (req, res) => {
     return res.json({
       username: user.username,
       admin: user.admin,
+      creationDate: user.creationDate,
+      lastSeen: user.lastSeen,
       token
     });
   }).catch(error => {
@@ -124,8 +126,10 @@ export const activateUser = (req, res) => {
 
 export const resetPassword = (req, res) => {
 
-  if (req.session.admin !== true)
+  if (req.session.admin !== true && req.session.loggedIn !== true)
     return res.status(403).json(PERM_ERROR);
+  if (req.session.admin !== true && req.session.username !== req.params.username)
+    return res.status(403).json(PERM_ERROR)
   model.resetPassword(req.params.username, req.body.password, req.session.username).then(() => {
     return res.json({success: "Password changed!"});
   }).catch(error => {

@@ -130,7 +130,7 @@
   {#if (selectedUser)}
     <Modal width="w-1/2" show={showUserModal} on:modalClosed={releaseUser}>
       <div class="font-mono text-md">
-         <table class="w-full">
+        <table class="w-full">
           <tr class="border-2 border-gray-900">
             <th class="w-1/3 text-right pr-2 bg-gray-900 text-white">Username</th>
             <td class="pl-2">{selectedUser.username}</td>
@@ -169,7 +169,7 @@
       <th><Fa icon={icons.faCrown} class="inline-block w-10 text-red-500"/>Admin</th>
     </tr>
     {#each users as user, index}
-      <tr transition:slide|local={{duration: 200}} class={"cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" + (user.suspended ? " text-cyan-700" : (user.loggedIn ? " text-green-900" : ""))} on:click={() => selectUser(index)}>
+      <tr transition:slide|local={{duration: 200}} class={"cursor-pointer hover:bg-gray-900 hover:text-white duration-75 border-b-2 border-gray-900" + (user.suspended ? " text-cyan-700" : (user.loggedIn || user.username === session.username ? " text-green-900" : ""))} on:click={() => selectUser(index)}>
         <td class="pl-2">{user.username}</td>
         <td class="pl-2">{formatDate(user.creationDate)}</td>
         <td class="pl-2">{formatDate(user.lastSeen)}</td>
