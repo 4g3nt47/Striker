@@ -446,8 +446,10 @@ export const setResult = async (agentID, data) => {
   }else if (task.taskType === "cd"){
     if (successful){
       task.data.dir = result;
-      result = "Changed working directory: " + result;
+      task.result = "Changed working directory: " + result;
     }
+  }else if (task.taskType === "ipinfo"){
+    task.result = JSON.stringify(JSON.parse(result), null, 2);
   }else{  
     // Cleanup trailing newlines.
     result = result.toString().replace(/\r\n+$/, "");

