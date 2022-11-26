@@ -443,14 +443,23 @@ export const setResult = async (agentID, data) => {
         task.result += `${val} `;
       }
     }
-  }else if (task.taskType === "cd"){
-    if (successful){
-      task.data.dir = result;
-      task.result = "Changed working directory: " + result;
-    }
-  }else if (task.taskType === "ipinfo"){
+  }else if (task.taskType === "cd" && task.successful){
+    task.data.dir = result;
+    task.result = "Changed working directory: " + result;
+  }else if (task.taskType === "ipinfo" && task.successful){
     task.result = JSON.stringify(JSON.parse(result), null, 2);
-  }else{  
+  }else if (task.taskType === "ls" && task.successful){
+    const entries = JSON.parse(result);
+    entries.sort((x, y) => x[2].localeCompare(y[2]));
+    for (let i = 0; i < entries.length; i++){
+      const entry = entries[i];
+      task.result += ` ${entry[1].toString().padStart(10, " ")} | ${entry[0] === 0 ? 'F' : 'D'} | ${entry[2]}\n`
+    }
+    if (entries.length === 0)
+      task.result = "Empty directory: " + task.data.dir;
+  }else if (task.taskType === "del"){
+    task.result = `${result} file(s) deleted!`;
+  }else{
     // Cleanup trailing newlines.
     result = result.toString().replace(/\r\n+$/, "");
     result = result.replace(/\n+$/, "");

