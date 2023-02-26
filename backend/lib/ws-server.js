@@ -94,7 +94,9 @@ export const setupWS = (httpServer) => {
       "ls": "List contents of current working directory",
       "ls <dir>": "List contents of a given directory",
       "del <file>": "Delete a file/directory",
-      "cat <file>": "Print out the contents of a file"
+      "cat <file>": "Print out the contents of a file",
+      "pwd": "Print agent's working directory",
+      "pid": "Print agent's process ID"
     }
 
     /**
@@ -332,6 +334,18 @@ export const setupWS = (httpServer) => {
             let file = input.substr(4).trim();
             taskModel.createTask(username, {
               agentID, taskType: "cat", data: {file}
+            });
+          }else if (input === "pwd"){
+            client.emit("agent_console_output", {
+              agentID,
+              prompt: serverPrompt,
+              msg: "Current working directory: " + agent.cwd
+            });
+          }else if (input === "pid"){
+            client.emit("agent_console_output", {
+              agentID,
+              prompt: serverPrompt,
+              msg: `Process ID: ${agent.pid}`
             });
           }else{ // Unknown query
             client.emit("agent_console_output", {

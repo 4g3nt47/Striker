@@ -340,7 +340,7 @@ This will compile everything into the `bin/` directory, and you will have the bu
 
 **B) The Python Agent**
 
-Striker also comes with a self-contained python 3 agent. This is located at `agent/python/`. Only the most basic features are implemented in this agent. Useful for hosts that can't run the C agent but have python installed.
+Striker also comes with a self-contained python agent (tested on python 2.7.16 and 3.7.3). This is located at `agent/python/`. Only the most basic features are implemented in this agent. Useful for hosts that can't run the C agent but have python installed.
 
 There are 2 file in this directory;
 

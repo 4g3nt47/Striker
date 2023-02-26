@@ -16,6 +16,7 @@
   #include <winsock2.h>
   #include <ws2tcpip.h>
   #include <wingdi.h>
+  #include <fileapi.h>
 #else
   #define IS_LINUX
 #endif
