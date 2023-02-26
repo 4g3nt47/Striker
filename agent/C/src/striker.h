@@ -181,6 +181,9 @@ FILE *screenshot();
 // Delete a file/directory. Returns number of files deleted.
 size_t delete_file(char *filename);
 
+// Copy a file
+size_t copy_file(char *dst, char *src);
+
 // Parse a task JSON and return it, NULL on error.
 task *parse_task(cJSON *json);
 

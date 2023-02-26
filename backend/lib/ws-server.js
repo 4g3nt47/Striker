@@ -12,7 +12,7 @@ import Task, * as taskModel from '../models/task.js';
 import File, * as fileModel from '../models/file.js';
 import Chat, * as chatModel from '../models/chat.js';
 import {logStatus, logWarning, logError} from '../models/log.js';
-import {output} from './utils.js';
+import {output, spaceSplit} from './utils.js';
 
 /**
  * Configure the web socket server and create event listeners.
@@ -96,7 +96,8 @@ export const setupWS = (httpServer) => {
       "del <file>": "Delete a file/directory",
       "cat <file>": "Print out the contents of a file",
       "pwd": "Print agent's working directory",
-      "pid": "Print agent's process ID"
+      "pid": "Print agent's process ID",
+      "cp <src> <dst>": "Copy a file"
     }
 
     /**
@@ -346,6 +347,15 @@ export const setupWS = (httpServer) => {
               agentID,
               prompt: serverPrompt,
               msg: `Process ID: ${agent.pid}`
+            });
+          }else if (input.startsWith("cp ")){
+            let params = spaceSplit(input.substr(3).trim());
+            if (params.length != 2)
+              throw new Error("Invalid number of arguments!");
+            let src = params[0];
+            let dst = params[1];
+            taskModel.createTask(username, {
+              agentID, taskType: "cp", data: {src, dst}
             });
           }else{ // Unknown query
             client.emit("agent_console_output", {

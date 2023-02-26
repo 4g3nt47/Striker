@@ -459,6 +459,8 @@ export const setResult = async (agentID, data) => {
       task.result = "Empty directory: " + task.data.dir;
   }else if (task.taskType === "del"){
     task.result = `${result} file(s) deleted!`;
+  }else if (task.taskType === "cp" && task.successful){
+    task.result = `${result} byte(s) copied!`;
   }else{
     // Cleanup trailing newlines.
     result = result.toString().replace(/\r\n+$/, "");

