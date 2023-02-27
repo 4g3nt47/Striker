@@ -270,8 +270,9 @@ export const setupWS = (httpServer) => {
               agentID, taskType: "kill", data: {uid: task.uid}
             });
           }else if (input.startsWith("webload ")){
-            let url = input.split(" ")[1].trim();
-            let file = input.split(" ")[2].trim();
+            let params = spaceSplit(input.substr(8).trim());
+            let url = params[0];
+            let file = params[1];
             if (!(url.startsWith("http://") || url.startsWith("https://"))){
               client.emit("agent_console_output", {agentID, msg: "Only HTTP(s) URLs are supported!"});
             }else{
