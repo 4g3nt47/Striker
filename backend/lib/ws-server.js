@@ -396,6 +396,16 @@ export const setupWS = (httpServer) => {
       }
     });
 
+    // Handle note updates.
+    client.on("update_note", (agentID, note) => {
+
+      agentID = agentID.toString();
+      note = note.toString();
+      agentModel.updateAgentNote(agentID, username, note).catch(error => {
+        client.emit("striker_error", error.message);
+      })
+    });
+
     // Handles client ws disconnect
     client.on("disconnect", () => {
 

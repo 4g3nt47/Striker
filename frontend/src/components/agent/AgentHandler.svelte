@@ -21,6 +21,7 @@
   import Button from '../Button.svelte';
   import ErrorMsg from '../ErrorMsg.svelte';
   import AgentFiles from './AgentFiles.svelte';
+  import Modal from '../Modal.svelte';
   import {formatDate, formatDuration} from '../../lib/striker-utils.js';
 
   export let session = {};
@@ -31,6 +32,7 @@
   
   const dispatch = createEventDispatcher();
   let showTaskModal = false; // Show modal of selected task.
+  let showNotesModal = false;
   let selectedTask = null; // The selected task in tasks list.
   let selectedTaskData = ""; // The data/args of a selected task.
   let tabs = ["Info", "Tasks", "Console", "Files"];
@@ -41,6 +43,8 @@
   let infoPageError = "";
   let cmdHistory = {cmds: [], index: 0};
   let agentTypes = ["Native C", "Python", "Unknown"];
+  let notes = agent.notes;
+  let savedNote = agent.notes;
 
   // Handles the `selectTask` event created by TasksList.svelte
   const selectTask = (e) => {
@@ -105,11 +109,19 @@
     }
   };
 
-  // A reactive expression to render new console messages.
-  $: updateConsole(consoleMsgs);
+  // Called when notes are updated externally.
+  const updateNotes = (agent) => {
+    
+    if (agent.notes !== savedNote){
+      notes = agent.notes;
+      savedNote = agent.notes;
+    }
+  };
 
-  // A reactive expression to for tasks update.
+  // Reactive expressions that ensure up-to-date display.
+  $: updateConsole(consoleMsgs);
   $: updateTasks(tasks);
+  $: updateNotes(agent);
 
   // Handles tab switch.
   const switchTab = (newTab) => {
@@ -210,12 +222,32 @@
     }
   };
 
+  // Save updated notes.
+  const saveNotes = async () => {
+
+    socket.emit("update_note", agent.uid, notes);
+    showNotesModal = false;
+  };
+
   onMount(() => {
     setConsoleSize();
     window.onresize = setConsoleSize;
   }); 
 
 </script>
+
+<!-- Notes Modal -->
+
+<Modal width="w-2/3" show={showNotesModal} on:modalClosed={() => showNotesModal = false}>
+  <div class="w-full p-3">
+    <textarea class="w-full text-lg font-mono" rows="9" bind:value={notes}></textarea>
+    <div class="w-1/3 mx-auto my-2">
+      <Button on:click={saveNotes}>Save</Button>
+    </div>
+  </div>
+</Modal>
+
+<!-- The main page -->
 
 <div id="tabs-container" class="border-2 border-gray-900 min-h-full max-h-full no-scrollbar overflow-y-auto overflow-x-hidden">
 
@@ -276,7 +308,8 @@
           <td class={"pl-3 " + (agent.frozen ? "text-cyan-700" : "")}>{agent.frozen ? "yes" : "no"}</td>
         </tr>        
       </table>
-      <div class="w-1/5 my-2 mx-auto">
+      <div class="w-1/2 my-3 mx-auto flex flex-row space-x-2">
+        <Button on:click={() => showNotesModal = true}>Notes</Button>
         <Button type="danger" bind:btn={deleteAgentBtn} on:click={deleteAgent}>Delete Agent</Button>
       </div>
       <ErrorMsg error={infoPageError}/>

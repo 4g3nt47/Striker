@@ -45,6 +45,10 @@ const agentSchema = mongoose.Schema({
     type: Object,
     required: false
   },
+  notes: {
+    type: String,
+    required: false
+  },
   dateCreated: {
     type: Number,
     required: true
@@ -86,7 +90,8 @@ export const createAgent = async (data) => {
     cwd: (data.cwd ? data.cwd.toString() : "unknown"),
     pid: (data.pid !== undefined ? parseInt(data.pid) : -1),
     dateCreated: Date.now(),
-    lastSeen: Date.now()
+    lastSeen: Date.now(),
+    notes: ""
   });
   await agent.save();
   logStatus(`New agent called home: '${agent.uid}'`);
@@ -202,4 +207,26 @@ export const deleteAgent = async (agentID, username) => {
     user: username
   });
   return data;
+};
+
+/**
+ * Update an agent's note. Emits the "agent_updated" ws event on success.
+ * @param {string} agentID - The ID of the target agent.
+ * @param {string} username - The user requesting the action.
+ * @param {string} note - The new note
+ * @return {object} The updated agent.
+ */
+export const updateAgentNote = async (agentID, username, note) => {
+
+  const socketServer = global.socketServer;
+  const agent = await Agent.findOne({uid: agentID});
+  if (!agent)
+    throw new Error("Invalid agent!");
+  if (note.length > 9096)
+    note = note.substr(0, 9096);
+  agent.notes = note;
+  await agent.save();
+  logStatus(`Notes updated for agent '${agentID}' by '${username}'`);
+  socketServer.emit("update_agent", agent);
+  return agent;
 };
